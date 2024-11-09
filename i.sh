@@ -10,37 +10,189 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Progress indicator
-show_progress() {
-    echo -e "\n${BLUE}[$1/9]${NC} ${GREEN}$2...${NC}"
+# Progress tracking variables
+TOTAL_STEPS=9
+CURRENT_STEP=0
+SECONDS=0  # Built-in bash timer
+
+# Terminal styling functions
+setup_terminal() {
+    # Save cursor position and clear screen
+    tput smcup
+    clear
+    
+    # Get terminal size
+    TERM_WIDTH=$(tput cols)
+    TERM_HEIGHT=$(tput lines)
+    
+    # Draw background
+    for ((i=1; i<=TERM_HEIGHT; i++)); do
+        tput cup $i 0
+        printf "%${TERM_WIDTH}s" "" | tr ' ' '░'
+    done
+    
+    # Draw header box
+    draw_header_box
 }
- 
+
+restore_terminal() {
+    tput rmcup
+}
+
+draw_header_box() {
+    local title="ITFlow-NG Installation"
+    local version="v${VERSION}"
+    local box_width=$((TERM_WIDTH - 4))
+    local padding=$(( (box_width - ${#title}) / 2 ))
+    
+    # Position at top of screen
+    tput cup 1 2
+    
+    # Draw top border
+    printf "╔"
+    printf "%${box_width}s" "" | tr ' ' '═'
+    printf "╗"
+    
+    # Draw title
+    tput cup 2 2
+    printf "║"
+    printf "%${padding}s%s%${padding}s" "" "$title" ""
+    printf "║"
+    
+    # Draw version
+    tput cup 3 2
+    printf "║"
+    printf "%${box_width}s" "" | tr ' ' ' '
+    printf "║"
+    
+    # Draw bottom border
+    tput cup 4 2
+    printf "╚"
+    printf "%${box_width}s" "" | tr ' ' '═'
+    printf "╝"
+    
+    # Reset cursor position for content
+    tput cup 6 0
+}
+
+draw_content_box() {
+    local title="$1"
+    local start_line=6
+    local box_width=$((TERM_WIDTH - 4))
+    
+    # Draw top border with title
+    tput cup $start_line 2
+    printf "╔══[ %s ]" "$title"
+    printf "%$((box_width - ${#title} - 6))s" "" | tr ' ' '═'
+    printf "╗"
+    
+    # Draw sides
+    for ((i=1; i<=3; i++)); do
+        tput cup $((start_line + i)) 2
+        printf "║"
+        printf "%${box_width}s" ""
+        printf "║"
+    done
+    
+    # Draw bottom border
+    tput cup $((start_line + 4)) 2
+    printf "╚"
+    printf "%${box_width}s" "" | tr ' ' '═'
+    printf "╝"
+    
+    # Position cursor for content
+    tput cup $((start_line + 2)) 4
+}
+
+# Progress indicator with spinner and detailed output
+show_progress() {
+    CURRENT_STEP=$1
+    local message=$2
+    local spinner=( "⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏" )
+    local percentage=$((CURRENT_STEP * 100 / TOTAL_STEPS))
+    
+    # Clear the line and show progress
+    printf "\r\033[K"
+    printf "${BLUE}[%2d/%2d]${NC} " "$CURRENT_STEP" "$TOTAL_STEPS"
+    
+    # Show spinner and message
+    printf "${GREEN}${spinner[CURRENT_STEP % 10]}${NC} "
+    printf "${message}... "
+    
+    # Show percentage
+    printf "${YELLOW}(%3d%%)${NC}" "$percentage"
+    
+    # If it's the last step, add a newline
+    if [ "$CURRENT_STEP" -eq "$TOTAL_STEPS" ]; then
+        echo
+    fi
+}
+
+# Enhanced progress bar with box
+show_progress_bar() {
+    local current=$1
+    local total=$2
+    local width=50
+    local percentage=$((current * 100 / total))
+    local completed=$((width * current / total))
+    local remaining=$((width - completed))
+    local elapsed=$SECONDS
+    
+    # Calculate ETA
+    local eta="--:--"
+    if [ "$current" -gt 0 ]; then
+        local rate=$(bc <<< "scale=2; $elapsed / $current")
+        local remaining_time=$(bc <<< "scale=0; ($total - $current) * $rate")
+        eta=$(date -u -d "@$remaining_time" +"%M:%S")
+    fi
+    
+    # Draw progress box
+    draw_content_box "Progress"
+    
+    # Show progress bar
+    printf "["
+    printf "%${completed}s" | tr ' ' '█'
+    if [ "$completed" -lt "$width" ]; then
+        printf "▓"
+        printf "%$((remaining-1))s" | tr ' ' '░'
+    fi
+    printf "] "
+    
+    # Show percentage and ETA
+    printf "%3d%% " "$percentage"
+    printf "${BLUE}ETA: %s${NC}" "$eta"
+}
+
 # Version check with styled output
 check_version() {
-    echo -e "\n${BLUE}[•]${NC} Checking for latest version..."
+    draw_content_box "Version Check"
+    echo -e "${BLUE}[•]${NC} Checking for latest version..."
+    
     LATEST_VERSION=$(curl -sSL https://raw.githubusercontent.com/o-psi/nestogy_install/refs/heads/main/version.txt)
     if [[ "$LATEST_VERSION" == "404: Not Found" ]]; then
         echo -e "${GREEN}✓${NC} Version check skipped - using local version: $VERSION"
         return 0
     elif [ "$VERSION" != "$LATEST_VERSION" ]; then
-        echo -e "${RED}╔════════════════════════════════════════╗${NC}"
-        echo -e "${RED}║ A newer version ($LATEST_VERSION) is available! ║${NC}"
-        echo -e "${RED}║ Please run the latest installer.                ║${NC}"
-        echo -e "${RED}╚════════════════════════════════════════╝${NC}"
+        draw_content_box "Version Error"
+        echo -e "${RED}A newer version ($LATEST_VERSION) is available!"
+        echo -e "Please run the latest installer.${NC}"
+        read -n 1 -p "Press any key to exit..."
         exit 1
     fi
     echo -e "${GREEN}✓${NC} Running latest version"
-} 
+}
 
 # Script verification with styled output
 verify_script() {
-    echo -e "\n${BLUE}[•]${NC} Verifying script integrity..."
+    draw_content_box "Script Verification"
+    echo -e "${BLUE}[•]${NC} Verifying script integrity..."
+    
     SCRIPT_HASH=$(curl -sSL https://raw.githubusercontent.com/o-psi/nestogy_install/refs/heads/main/i.sh.sha256)
     if ! echo "$SCRIPT_HASH $(basename $0)" | sha256sum -c - >/dev/null 2>&1; then
-        echo -e "${RED}╔════════════════════════════════════════╗${NC}"
-        echo -e "${RED}║        Verification Failed!            ║${NC}"
-        echo -e "${RED}║ Script may have been tampered with.    ║${NC}"
-        echo -e "${RED}╚════════════════════════════════════════╝${NC}"
+        draw_content_box "Verification Error"
+        echo -e "${RED}Script verification failed!"
+        echo -e "Script may have been tampered with.${NC}"
+        read -n 1 -p "Press any key to exit..."
         exit 1
     fi
     echo -e "${GREEN}✓${NC} Script verified"
@@ -48,12 +200,14 @@ verify_script() {
 
 # Root check with styled output
 check_root() {
-    echo -e "\n${BLUE}[•]${NC} Checking permissions..."
+    draw_content_box "Permission Check"
+    echo -e "${BLUE}[•]${NC} Checking permissions..."
+    
     if [[ $EUID -ne 0 ]]; then
-        echo -e "${RED}╔════════════════════════════════════════╗${NC}"
-        echo -e "${RED}║    Error: Root privileges required     ║${NC}"
-        echo -e "${RED}║    Please run with sudo or as root     ║${NC}"
-        echo -e "${RED}╚════════════════════════════════════════╝${NC}"
+        draw_content_box "Permission Error"
+        echo -e "${RED}Root privileges required"
+        echo -e "Please run with sudo or as root${NC}"
+        read -n 1 -p "Press any key to exit..."
         exit 1
     fi
     echo -e "${GREEN}✓${NC} Root privileges confirmed"
@@ -61,12 +215,14 @@ check_root() {
 
 # OS check with styled output
 check_os() {
-    echo -e "\n${BLUE}[•]${NC} Checking system compatibility..."
+    draw_content_box "System Check"
+    echo -e "${BLUE}[•]${NC} Checking system compatibility..."
+    
     if ! grep -E "24.04" "/etc/"*"release" &>/dev/null; then
-        echo -e "${RED}╔════════════════════════════════════════╗${NC}"
-        echo -e "${RED}║    Error: Unsupported OS detected      ║${NC}"
-        echo -e "${RED}║    Ubuntu 24.04 is required            ║${NC}"
-        echo -e "${RED}╚════════════════════════════════════════╝${NC}"
+        draw_content_box "System Error"
+        echo -e "${RED}Unsupported OS detected"
+        echo -e "Ubuntu 24.04 is required${NC}"
+        read -n 1 -p "Press any key to exit..."
         exit 1
     fi
     echo -e "${GREEN}✓${NC} System compatible"
@@ -74,7 +230,9 @@ check_os() {
 
 # Get domain with styled input
 get_domain() {
-    echo -e "\n${BLUE}[•]${NC} Domain Configuration"
+    draw_content_box "Domain Configuration"
+    echo -e "${BLUE}[•]${NC} Domain Setup"
+    
     while [[ $domain != *[.]* ]]; do
         echo -e "${YELLOW}Please enter your domain (e.g., domain.com):${NC}"
         echo -ne "→ "
@@ -85,37 +243,40 @@ get_domain() {
 
 # Modified installation steps with progress indicators
 install_packages() {
-    show_progress "1" "Installing system packages"
+    draw_content_box "Installing Packages"
     
-    if [ "$TEST_MODE" = true ]; then
-        echo -e "${BLUE}[TEST] Would run:${NC}"
-        echo "apt-get update"
-        echo "apt-get -y upgrade"
-        echo "apt-get install -y apache2 mariadb-server php libapache2-mod-php..."
-        return 0
-    fi
+    local packages=(
+        "apache2"
+        "mariadb-server"
+        "php"
+        "libapache2-mod-php"
+        "php-intl"
+        "php-mysqli"
+        "php-curl"
+        "php-imap"
+        "php-mailparse"
+        "libapache2-mod-md"
+    )
     
-    echo -e "${BLUE}[•]${NC} Updating package lists..."
-    if ! apt-get update; then
-        echo -e "${RED}Failed to update package lists${NC}"
-        return 1
-    fi
+    local total_packages=${#packages[@]}
+    local current=0
     
-    echo -e "${BLUE}[•]${NC} Upgrading existing packages..."
-    if ! apt-get -y upgrade; then
-        echo -e "${RED}Failed to upgrade packages${NC}"
-        return 1
-    fi
+    for package in "${packages[@]}"; do
+        ((current++))
+        show_progress_bar "$current" "$total_packages"
+        
+        if [ "$TEST_MODE" = true ]; then
+            sleep 0.5  # Simulate installation in test mode
+        else
+            if ! apt-get install -y "$package" >/dev/null 2>&1; then
+                echo -e "\n${RED}Failed to install $package${NC}"
+                return 1
+            fi
+        fi
+    done
     
-    echo -e "${BLUE}[•]${NC} Installing required packages..."
-    if ! apt-get install -y apache2 mariadb-server php libapache2-mod-php php-intl \
-    php-mysqli php-curl php-imap php-mailparse libapache2-mod-md \
-    certbot python3-certbot-apache git sudo; then
-        echo -e "${RED}Failed to install required packages${NC}"
-        return 1
-    fi
-    
-    echo -e "${GREEN}✓${NC} Packages installed successfully"
+    echo -e "\n${GREEN}✓${NC} Packages installed successfully ($(($SECONDS - start_time))s)"
+    return 0
 }
 
 generate_passwords() {
@@ -252,34 +413,48 @@ generate_cronkey_file() {
 }
 
 setup_mysql() {
+    draw_content_box "Database Setup"
+    echo -e "${BLUE}[•]${NC} Configuring MySQL..."
+    
     if [ "$TEST_MODE" = true ]; then
         echo -e "${BLUE}[TEST] Would configure MySQL:${NC}"
         echo "Would create database: nestogy"
         echo "Would create user: nestogy@localhost"
-        echo "Would grant privileges on nestogy.* to nestogy@localhost"
         return 0
     fi
     
+    local steps=4
+    local current=0
+    
+    ((current++))
+    show_progress_bar $current $steps
     if ! mysql -e "CREATE DATABASE nestogy /*\!40100 DEFAULT CHARACTER SET utf8 */;"; then
-        echo -e "${RED}Failed to create database${NC}"
+        echo -e "\n${RED}Failed to create database${NC}"
         return 1
     fi
     
+    ((current++))
+    show_progress_bar $current $steps
     if ! mysql -e "CREATE USER nestogy@localhost IDENTIFIED BY '${mariadbpwd}';"; then
-        echo -e "${RED}Failed to create MySQL user${NC}"
+        echo -e "\n${RED}Failed to create MySQL user${NC}"
         return 1
     fi
     
+    ((current++))
+    show_progress_bar $current $steps
     if ! mysql -e "GRANT ALL PRIVILEGES ON nestogy.* TO 'nestogy'@'localhost';"; then
-        echo -e "${RED}Failed to grant privileges${NC}"
+        echo -e "\n${RED}Failed to grant privileges${NC}"
         return 1
     fi
     
+    ((current++))
+    show_progress_bar $current $steps
     if ! mysql -e "FLUSH PRIVILEGES;"; then
-        echo -e "${RED}Failed to flush privileges${NC}"
+        echo -e "\n${RED}Failed to flush privileges${NC}"
         return 1
     fi
     
+    echo -e "\n${GREEN}✓${NC} Database configured successfully"
     return 0
 }
 
@@ -311,24 +486,25 @@ show_welcome_message() {
 
 # Final instructions with styled output
 print_final_instructions() {
-    clear
-    echo -e "╔════════════════════════════════════════════════════════════════╗"
-    echo -e "║                 Installation Complete! 🎉                       ║"
-    echo -e "╚════════════════════════════════════════════════════════════════╝"
+    draw_content_box "Installation Complete! 🎉"
+    
     echo -e "\n📋 Next Steps:"
     echo -e "\n1. Set up SSL Certificate:"
     echo -e "   Run this command to get your DNS challenge:"
     echo -e "   ${YELLOW}sudo certbot certonly --manual --preferred-challenges dns --agree-tos --domains *.${domain}${NC}"
+    
     echo -e "\n2. Complete Setup:"
     echo -e "   Visit: ${GREEN}https://${domain}${NC}"
-    echo -e "\n3. Database Credentials:"
-    echo -e "   ┌─────────────────────────────────────────────┐"
-    echo -e "   │ Database User:     ${GREEN}nestogy${NC}"
-    echo -e "   │ Database Name:     ${GREEN}nestogy${NC}"
-    echo -e "   │ Database Password: ${GREEN}${mariadbpwd}${NC}"
-    echo -e "   └─────────────────────────────────────────────┘"
+    
+    draw_content_box "Credentials"
+    echo -e "Database User:     ${GREEN}nestogy${NC}"
+    echo -e "Database Name:     ${GREEN}nestogy${NC}"
+    echo -e "Database Password: ${GREEN}${mariadbpwd}${NC}"
+    
     echo -e "\n⚠️  Important: Save these credentials in a secure location!"
-    echo -e "\nFor support, visit: https://github.com/twetech/itflow-ng/issues\n"
+    echo -e "\nFor support, visit: https://github.com/twetech/itflow-ng/issues"
+    
+    read -n 1 -p "Press any key to exit..."
 }
 
 # Add test mode flag
@@ -485,22 +661,38 @@ parse_args() {
 # Finally, the main function
 main() {
     parse_args "$@"
-
+    
     if [ "$TEST_MODE" = true ]; then
         run_tests
         exit $?
     fi
-
-    # Regular execution flow
-    show_welcome_message
+    
+    # Setup terminal
+    setup_terminal
+    trap restore_terminal EXIT
+    
+    # Welcome message
+    draw_content_box "Welcome"
+    echo "Welcome to ITFlow-NG Installation"
+    echo "Version: ${VERSION}"
+    echo -e "\nThis script will:"
+    echo " • Install required system packages"
+    echo " • Configure Apache and PHP"
+    echo " • Set up MariaDB database"
+    echo " • Configure SSL certificates"
+    echo " • Set up automated tasks"
+    echo -e "\nPress any key to begin..."
+    read -n 1
+    
+    # Run installation steps
     check_version
     verify_script
     check_root
     check_os
     get_domain
     generate_passwords
-
-    # Execute installation steps with progress tracking
+    
+    # Installation steps with progress tracking
     install_packages
     modify_php_ini
     setup_webroot
@@ -509,10 +701,16 @@ main() {
     setup_cronjobs
     generate_cronkey_file
     setup_mysql
-
-    # Show final instructions
+    
+    # Final instructions
     print_final_instructions
+    
+    # Restore terminal
+    restore_terminal
 }
+
+# Add trap for clean exit
+trap 'restore_terminal' EXIT INT TERM
 
 # Call main with all arguments
 main "$@"
