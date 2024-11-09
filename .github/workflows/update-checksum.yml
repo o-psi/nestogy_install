@@ -19,11 +19,11 @@ jobs:
 
       - name: Calculate SHA256
         run: |
-          sha256sum itflow_install.sh | awk '{print $1}' > itflow_install.sh.sha256
+          sha256sum i.sh | awk '{print $1}' > i.sh.sha256
 
       - name: Commit and push if changed
         run: |
           git config --local user.name "GitHub Action"
           git config --local user.email "action@github.com"
-          git add itflow_install.sh.sha256
+          git add i.sh.sha256
           git diff --quiet && git diff --staged --quiet || (git commit -m "Update SHA256 checksum" && git push) 
