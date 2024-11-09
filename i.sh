@@ -25,8 +25,8 @@ check_version() {
     elif [ "$VERSION" != "$LATEST_VERSION" ]; then
         echo -e "${RED}╔════════════════════════════════════════╗${NC}"
         echo -e "${RED}║ A newer version ($LATEST_VERSION) is available! ║${NC}"
-        echo -e "${RED}║ Please run the latest installer.        ║${NC}"
-        echo -e "${RED}╚══════════════════════���═════════════════╝${NC}"
+        echo -e "${RED}║ Please run the latest installer.                ║${NC}"
+        echo -e "${RED}╚════════════════════════════════════════╝${NC}"
         exit 1
     fi
     echo -e "${GREEN}✓${NC} Running latest version"
