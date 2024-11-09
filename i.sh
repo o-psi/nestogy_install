@@ -380,6 +380,43 @@ install_packages() {
     if [ "$TEST_MODE" = true ]; then
         echo "Testing package dependencies..."
         
+        # Helper function to check if a package or its alternative is available
+        check_package_or_alternative() {
+            local pkg="$1"
+            
+            # Handle virtual packages and common alternatives
+            case "$pkg" in
+                "<perl:any>")
+                    if apt-cache show perl >/dev/null 2>&1; then
+                        return 0
+                    fi
+                    ;;
+                "<python3:any>")
+                    if apt-cache show python3 >/dev/null 2>&1; then
+                        return 0
+                    fi
+                    ;;
+                "<debconf-2.0>")
+                    if apt-cache show debconf >/dev/null 2>&1; then
+                        return 0
+                    fi
+                    ;;
+                "<python3-certbot-abi-1>")
+                    if apt-cache show python3-certbot >/dev/null 2>&1; then
+                        return 0
+                    fi
+                    ;;
+                *)
+                    # Remove any version requirements (e.g., package (>= 1.0))
+                    pkg=$(echo "$pkg" | cut -d' ' -f1)
+                    if apt-cache show "$pkg" >/dev/null 2>&1; then
+                        return 0
+                    fi
+                    ;;
+            esac
+            return 1
+        }
+        
         # Required packages with their dependencies
         local packages=(
             # Web server
@@ -434,7 +471,7 @@ install_packages() {
             local missing_pkg_deps=()
             
             for dep in $deps; do
-                if ! apt-cache show "$dep" >/dev/null 2>&1; then
+                if ! check_package_or_alternative "$dep"; then
                     missing_pkg_deps+=("$dep")
                 fi
             done
@@ -444,7 +481,10 @@ install_packages() {
             else
                 echo "❌ Missing dependencies"
                 for dep in "${missing_pkg_deps[@]}"; do
-                    missing_deps+=("$dep for $package")
+                    # Only add if it's not a virtual package that we can handle
+                    if ! check_package_or_alternative "$dep"; then
+                        missing_deps+=("$dep for $package")
+                    fi
                 done
             fi
         done
