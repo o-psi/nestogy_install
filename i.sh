@@ -10,46 +10,34 @@ fi
 
 # Test mode function
 run_tests() {
-    echo "Running in test mode..."
-    
-    # Setup terminal
-    setup_terminal
-    trap restore_terminal EXIT
-    
-    # Welcome message
-    draw_content_box "Test Mode"
-    echo "ITFlow-NG Installation Test"
-    echo "Version: ${VERSION}"
-    echo "Domain: ${domain}"
-    echo -e "\nPress any key to begin test..."
-    read -n 1
-    
-    # Run installation steps in test mode
+    # Disable terminal UI in test mode
+    TERM_UI=false
     TEST_MODE=true
     
-    check_version
-    verify_script
-    check_root
-    check_os
-    get_domain
-    generate_passwords
-    install_packages
-    modify_php_ini
-    setup_webroot
-    setup_apache
-    clone_nestogy
-    setup_cronjobs
-    generate_cronkey_file
-    setup_mysql
+    echo "=== ITFlow-NG Installation Test ==="
+    echo "Version: ${VERSION}"
+    echo "Domain: ${domain}"
+    echo "Running tests..."
+    echo
     
-    # Show test completion message
-    draw_content_box "Test Complete"
-    echo -e "${GREEN}✓${NC} All tests completed successfully"
-    echo -e "\nPress any key to exit..."
-    read -n 1
+    # Run installation steps in test mode
+    check_version_test
+    verify_script_test
+    check_root_test
+    check_os_test
+    get_domain_test
+    generate_passwords_test
+    install_packages_test
+    modify_php_ini_test
+    setup_webroot_test
+    setup_apache_test
+    clone_nestogy_test
+    setup_cronjobs_test
+    generate_cronkey_test
+    setup_mysql_test
     
-    # Restore terminal
-    restore_terminal
+    echo
+    echo "✓ All tests completed successfully"
     return 0
 }
 
@@ -302,7 +290,12 @@ install_packages() {
         show_progress_bar $current $total
         
         if [ "$TEST_MODE" = true ]; then
-            sleep 0.5
+            # Verify package exists in repository
+            if ! apt-cache show "$package" >/dev/null 2>&1; then
+                echo -e "${RED}Package not found: $package${NC}"
+                return 1
+            fi
+            echo -e "${BLUE}[TEST] Verified package: $package${NC}"
         else
             if ! apt-get install -y $package >/dev/null 2>&1; then
                 echo -e "${RED}Failed to install $package${NC}"
@@ -311,7 +304,8 @@ install_packages() {
         fi
     done
     
-    echo -e "${GREEN}✓${NC} Packages installed"
+    echo -e "${GREEN}✓${NC} Package verification complete"
+    return 0
 }
 
 modify_php_ini() {
@@ -370,19 +364,35 @@ setup_webroot() {
 setup_apache() {
     show_progress "$((++CURRENT_STEP))" "Configuring Apache"
     
-    if [ "$TEST_MODE" = true ]; then
-        echo -e "${BLUE}[TEST] Would configure Apache${NC}"
-        return 0
-    fi
-    
     local steps=4
     local current=0
+    
+    # Verify Apache is installed
+    if ! command -v apache2 >/dev/null 2>&1; then
+        echo -e "${RED}Apache not installed${NC}"
+        return 1
+    fi
     
     ((current++))
     show_progress_bar $current $steps
     
-    # Create virtual host
-    cat > "/etc/apache2/sites-available/${domain}.conf" <<EOL
+    if [ "$TEST_MODE" = true ]; then
+        # Check if site already exists
+        if [ -f "/etc/apache2/sites-available/${domain}.conf" ]; then
+            echo -e "${RED}Site configuration already exists${NC}"
+            return 1
+        fi
+        echo -e "${BLUE}[TEST] Site configuration available${NC}"
+        
+        # Verify Apache modules
+        if ! apache2ctl -M 2>/dev/null | grep -q "rewrite_module"; then
+            echo -e "${RED}Required module 'rewrite' not available${NC}"
+            return 1
+        fi
+        echo -e "${BLUE}[TEST] Required modules available${NC}"
+    else
+        # Create and enable site
+        cat > "/etc/apache2/sites-available/${domain}.conf" <<EOL
 <VirtualHost *:80>
     ServerName ${domain}
     DocumentRoot /var/www/${domain}
@@ -390,71 +400,81 @@ setup_apache() {
     CustomLog \${APACHE_LOG_DIR}/access.log combined
 </VirtualHost>
 EOL
-    
-    ((current++))
-    show_progress_bar $current $steps
-    if ! a2ensite "${domain}.conf"; then
-        echo -e "${RED}Failed to enable site${NC}"
-        return 1
+        
+        if ! a2ensite "${domain}.conf"; then
+            echo -e "${RED}Failed to enable site${NC}"
+            return 1
+        fi
+        
+        if ! a2dissite 000-default.conf; then
+            echo -e "${RED}Failed to disable default site${NC}"
+            return 1
+        fi
+        
+        if ! systemctl restart apache2; then
+            echo -e "${RED}Failed to restart Apache${NC}"
+            return 1
+        fi
     fi
     
-    ((current++))
-    show_progress_bar $current $steps
-    if ! a2dissite 000-default.conf; then
-        echo -e "${RED}Failed to disable default site${NC}"
-        return 1
-    fi
-    
-    ((current++))
-    show_progress_bar $current $steps
-    if ! systemctl restart apache2; then
-        echo -e "${RED}Failed to restart Apache${NC}"
-        return 1
-    fi
-    
-    echo -e "${GREEN}✓${NC} Apache configured"
+    echo -e "${GREEN}✓${NC} Apache configuration complete"
+    return 0
 }
 
 setup_mysql() {
     show_progress "$((++CURRENT_STEP))" "Setting up database"
     
-    if [ "$TEST_MODE" = true ]; then
-        echo -e "${BLUE}[TEST] Would configure MySQL${NC}"
-        return 0
-    fi
-    
     local steps=4
     local current=0
     
-    ((current++))
-    show_progress_bar $current $steps
-    if ! mysql -e "CREATE DATABASE nestogy CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"; then
-        echo -e "${RED}Failed to create database${NC}"
+    # Test database connection
+    if ! mysql -e "SELECT 1" >/dev/null 2>&1; then
+        echo -e "${RED}Cannot connect to MySQL${NC}"
         return 1
     fi
     
     ((current++))
     show_progress_bar $current $steps
-    if ! mysql -e "CREATE USER 'nestogy'@'localhost' IDENTIFIED BY '${mariadbpwd}';"; then
-        echo -e "${RED}Failed to create user${NC}"
-        return 1
+    
+    if [ "$TEST_MODE" = true ]; then
+        # Verify database doesn't exist
+        if mysql -e "SHOW DATABASES LIKE 'nestogy'" 2>/dev/null | grep -q "nestogy"; then
+            echo -e "${RED}Database already exists${NC}"
+            return 1
+        fi
+        echo -e "${BLUE}[TEST] Database name available${NC}"
+        
+        # Verify user doesn't exist
+        if mysql -e "SELECT User FROM mysql.user WHERE User='nestogy'" 2>/dev/null | grep -q "nestogy"; then
+            echo -e "${RED}User already exists${NC}"
+            return 1
+        fi
+        echo -e "${BLUE}[TEST] Username available${NC}"
+    else
+        # Create database and user
+        if ! mysql -e "CREATE DATABASE nestogy CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"; then
+            echo -e "${RED}Failed to create database${NC}"
+            return 1
+        fi
+        
+        if ! mysql -e "CREATE USER 'nestogy'@'localhost' IDENTIFIED BY '${mariadbpwd}';"; then
+            echo -e "${RED}Failed to create user${NC}"
+            return 1
+        fi
+        
+        if ! mysql -e "GRANT ALL PRIVILEGES ON nestogy.* TO 'nestogy'@'localhost';"; then
+            echo -e "${RED}Failed to grant privileges${NC}"
+            return 1
+        fi
+        
+        if ! mysql -e "FLUSH PRIVILEGES;"; then
+            echo -e "${RED}Failed to flush privileges${NC}"
+            return 1
+        fi
     fi
     
-    ((current++))
-    show_progress_bar $current $steps
-    if ! mysql -e "GRANT ALL PRIVILEGES ON nestogy.* TO 'nestogy'@'localhost';"; then
-        echo -e "${RED}Failed to grant privileges${NC}"
-        return 1
-    fi
-    
-    ((current++))
-    show_progress_bar $current $steps
-    if ! mysql -e "FLUSH PRIVILEGES;"; then
-        echo -e "${RED}Failed to flush privileges${NC}"
-        return 1
-    fi
-    
-    echo -e "${GREEN}✓${NC} Database configured"
+    echo -e "${GREEN}✓${NC} Database setup complete"
+    return 0
 }
 
 clone_nestogy() {

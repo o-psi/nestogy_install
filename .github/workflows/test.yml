@@ -13,12 +13,20 @@ jobs:
     strategy:
       matrix:
         function:
-          - test_install_packages
-          - test_modify_php_ini
-          - test_setup_webroot
-          - test_setup_apache
-          - test_setup_mysql
-          - test_setup_cronjobs
+          - check_version
+          - verify_script
+          - check_root
+          - check_os
+          - get_domain
+          - generate_passwords
+          - install_packages
+          - modify_php_ini
+          - setup_webroot
+          - setup_apache
+          - clone_nestogy
+          - setup_cronjobs
+          - generate_cronkey_file
+          - setup_mysql
 
     steps:
     - uses: actions/checkout@v2
