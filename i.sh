@@ -201,7 +201,7 @@ show_welcome_message() {
     echo -e "║                   ITFlow-NG Installation                      ║"
     echo -e "║                                                               ║"
     echo -e "╚═══════════════════════════════════════════════════════════════╝"
-    echo -e "\n                    Version: ${VERSION}\n"
+    echo -e "\n                     Version: ${VERSION}\n"
     echo -e "This script will:"
     echo -e " • Install required system packages"
     echo -e " • Configure Apache and PHP"
