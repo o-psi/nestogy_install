@@ -378,31 +378,105 @@ generate_passwords() {
 
 install_packages() {
     if [ "$TEST_MODE" = true ]; then
-        # Verify packages exist in repository
+        echo "Testing package dependencies..."
+        
+        # Required packages with their dependencies
         local packages=(
+            # Web server
             "apache2"
-            "mariadb-server"
-            "php"
             "libapache2-mod-php"
+            "libapache2-mod-md"
+            
+            # Database
+            "mariadb-server"
+            "mariadb-client"
+            
+            # PHP and extensions
+            "php"
+            "php-cli"
+            "php-common"
             "php-intl"
             "php-mysqli"
             "php-curl"
             "php-imap"
             "php-mailparse"
-            "libapache2-mod-md"
+            "php-xml"
+            "php-mbstring"
+            "php-zip"
+            
+            # SSL and security
+            "certbot"
+            "python3-certbot-apache"
+            
+            # System utilities
+            "git"
+            "curl"
+            "unzip"
+            "cron"
         )
         
+        local failed_packages=()
+        local missing_deps=()
+        
+        echo "Checking package availability..."
         for package in "${packages[@]}"; do
+            echo -n "Testing $package... "
+            
+            # Check if package exists in repository
             if ! apt-cache show "$package" >/dev/null 2>&1; then
-                echo "Package not found: $package"
-                return 1
+                echo "❌ Not found in repository"
+                failed_packages+=("$package")
+                continue
+            fi
+            
+            # Check package dependencies
+            local deps=$(apt-cache depends "$package" | grep "Depends:" | cut -d: -f2-)
+            local missing_pkg_deps=()
+            
+            for dep in $deps; do
+                if ! apt-cache show "$dep" >/dev/null 2>&1; then
+                    missing_pkg_deps+=("$dep")
+                fi
+            done
+            
+            if [ ${#missing_pkg_deps[@]} -eq 0 ]; then
+                echo "✓ OK"
+            else
+                echo "❌ Missing dependencies"
+                for dep in "${missing_pkg_deps[@]}"; do
+                    missing_deps+=("$dep for $package")
+                done
             fi
         done
-        return 0
+        
+        # Report results
+        echo -e "\nTest Results:"
+        echo "=============="
+        
+        if [ ${#failed_packages[@]} -eq 0 ] && [ ${#missing_deps[@]} -eq 0 ]; then
+            echo "✓ All packages and dependencies are available"
+            return 0
+        fi
+        
+        if [ ${#failed_packages[@]} -gt 0 ]; then
+            echo -e "\nMissing Packages:"
+            printf '  - %s\n' "${failed_packages[@]}"
+        fi
+        
+        if [ ${#missing_deps[@]} -gt 0 ]; then
+            echo -e "\nMissing Dependencies:"
+            printf '  - %s\n' "${missing_deps[@]}"
+        fi
+        
+        return 1
     fi
     
-    # Real installation code here
-    ...
+    show_progress "$((++CURRENT_STEP))" "Installing required packages"
+
+    apt-get update
+    apt-get install -y "${packages[@]}"
+
+    echo -e "${GREEN}✓${NC} Packages installed"
 }
 
 modify_php_ini() {
