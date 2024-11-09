@@ -86,8 +86,16 @@ CONTENT_WIDTH=$((TERM_WIDTH - 8))
 TOTAL_STEPS=12
 CURRENT_STEP=0
 
+# Add this helper function at the top
+disable_term_ui() {
+    [ "$TEST_MODE" = true ] && return 0
+    return 1
+}
+
 # Terminal setup and restoration
 setup_terminal() {
+    disable_term_ui && return 0
+    
     tput smcup
     clear
     
@@ -101,11 +109,15 @@ setup_terminal() {
 }
 
 restore_terminal() {
+    disable_term_ui && return 0
+    
     tput rmcup
 }
 
 # UI Components
 draw_header_box() {
+    disable_term_ui && return 0
+    
     local title="ITFlow-NG Installation"
     local box_width=$((TERM_WIDTH - 4))
     local padding=$(( (box_width - ${#title}) / 2 ))
@@ -132,6 +144,8 @@ draw_header_box() {
 }
 
 clear_content_area() {
+    disable_term_ui && return 0
+    
     local start_line=$CONTENT_START
     local lines=10
     
@@ -142,6 +156,8 @@ clear_content_area() {
 }
 
 draw_content_box() {
+    disable_term_ui && return 0
+    
     local title="$1"
     clear_content_area
     
@@ -164,6 +180,8 @@ draw_content_box() {
 }
 
 show_progress() {
+    disable_term_ui && return 0
+    
     CURRENT_STEP=$1
     local message=$2
     local spinner=( "⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏" )
@@ -178,6 +196,8 @@ show_progress() {
 }
 
 show_progress_bar() {
+    disable_term_ui && return 0
+    
     local current=$1
     local total=$2
     local width=50
