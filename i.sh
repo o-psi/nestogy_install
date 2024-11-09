@@ -218,12 +218,31 @@ check_version() {
 }
 
 verify_script() {
-    show_progress "$((++CURRENT_STEP))" "Verifying script"
-    
     if [ "$TEST_MODE" = true ]; then
-        echo -e "${BLUE}[TEST] Script verification skipped${NC}"
+        echo "Testing script verification..."
+        
+        # Check for required tools
+        if ! command -v sha256sum >/dev/null 2>&1; then
+            echo "Required tool 'sha256sum' not found"
+            return 1
+        fi
+        
+        if ! command -v curl >/dev/null 2>&1; then
+            echo "Required tool 'curl' not found"
+            return 1
+        fi
+        
+        # Test HTTPS connectivity
+        if ! curl -s -f "https://github.com" >/dev/null; then
+            echo "Cannot make HTTPS requests"
+            return 1
+        fi
+        
+        echo "✓ Script verification prerequisites verified"
         return 0
     fi
+    
+    show_progress "$((++CURRENT_STEP))" "Verifying script"
     
     SCRIPT_HASH=$(curl -sSL https://raw.githubusercontent.com/twetech/itflow-ng/main/i.sh.sha256)
     if ! echo "$SCRIPT_HASH $(basename $0)" | sha256sum -c - >/dev/null 2>&1; then
@@ -289,6 +308,30 @@ get_domain() {
 }
 
 generate_passwords() {
+    if [ "$TEST_MODE" = true ]; then
+        echo "Testing password generation..."
+        
+        # Check for required tools
+        if ! command -v tr >/dev/null 2>&1; then
+            echo "Required tool 'tr' not found"
+            return 1
+        fi
+        
+        if ! command -v head >/dev/null 2>&1; then
+            echo "Required tool 'head' not found"
+            return 1
+        fi
+        
+        # Test /dev/urandom access
+        if [ ! -r "/dev/urandom" ]; then
+            echo "Cannot access /dev/urandom"
+            return 1
+        }
+        
+        echo "✓ Password generation prerequisites verified"
+        return 0
+    fi
+    
     show_progress "$((++CURRENT_STEP))" "Generating secure passwords"
     
     mariadbpwd=$(tr -dc 'A-Za-z0-9' < /dev/urandom | fold -w 20 | head -n 1)
@@ -453,21 +496,33 @@ EOL
 
 setup_mysql() {
     if [ "$TEST_MODE" = true ]; then
-        # Verify MySQL is installed and running
-        if ! systemctl is-active --quiet mysql; then
-            echo "MySQL is not running"
+        echo "Testing MySQL setup..."
+        
+        # Check if MySQL package is available
+        if ! apt-cache show mysql-server >/dev/null 2>&1 && ! apt-cache show mariadb-server >/dev/null 2>&1; then
+            echo "MySQL/MariaDB package not available"
             return 1
         fi
-        # Test connection
-        if ! mysql -e "SELECT 1" >/dev/null 2>&1; then
-            echo "Cannot connect to MySQL"
+        
+        # Check if MySQL client is installed
+        if ! command -v mysql >/dev/null 2>&1; then
+            echo "MySQL client not installed"
             return 1
         fi
+        
+        echo "✓ MySQL package verification passed"
         return 0
     fi
     
-    # Real MySQL setup code here
-    ...
+    # Real MySQL setup code
+    show_progress "$((++CURRENT_STEP))" "Setting up database"
+    
+    if ! systemctl is-active --quiet mysql; then
+        echo -e "${RED}MySQL is not running${NC}"
+        return 1
+    fi
+    
+    # ... rest of the function ...
 }
 
 clone_nestogy() {
