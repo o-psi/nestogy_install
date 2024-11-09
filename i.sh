@@ -566,7 +566,11 @@ clone_nestogy() {
     show_progress "$((++CURRENT_STEP))" "Cloning ITFlow-NG"
     
     if [ "$TEST_MODE" = true ]; then
-        echo -e "${BLUE}[TEST] Would clone ITFlow-NG${NC}"
+        if ! git clone https://github.com/twetech/itflow-ng.git "/var/www/${domain}" >/dev/null 2>&1; then
+            echo -e "${RED}Failed to clone repository${NC}"
+            return 1
+        fi
+        echo -e "${GREEN}✓${NC} Repository cloned successfully"
         return 0
     fi
     
