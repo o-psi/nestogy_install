@@ -36,7 +36,7 @@ check_version() {
 verify_script() {
     echo -e "\n${BLUE}[•]${NC} Verifying script integrity..."
     SCRIPT_HASH=$(curl -sSL https://raw.githubusercontent.com/o-psi/nestogy_install/refs/heads/main/i.sh.sha256)
-    if ! echo "$SCRIPT_HASH *-" | sha256sum -c - >/dev/null 2>&1; then
+    if ! echo "$SCRIPT_HASH $(basename $0)" | sha256sum -c - >/dev/null 2>&1; then
         echo -e "${RED}╔════════════════════════════════════════╗${NC}"
         echo -e "${RED}║        Verification Failed!            ║${NC}"
         echo -e "${RED}║ Script may have been tampered with.    ║${NC}"
