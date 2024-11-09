@@ -3,27 +3,38 @@
 # Version
 VERSION="1.0.0"
 
-# Colors
+# Colors and formatting
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+YELLOW='\033[1;33m'
+NC='\033[0m'
 
-# Progress tracking variables
-TOTAL_STEPS=9
+# Set UTF-8 encoding
+export LANG=en_US.UTF-8
+export LC_ALL=en_US.UTF-8
+
+# Box drawing characters
+BOX_CHARS=(
+    "┌" "─" "┐"  # Top corners and horizontal
+    "│" " " "│"  # Vertical and space
+    "└" "─" "┘"  # Bottom corners and horizontal
+    "├" "┤"      # Side connectors
+    "═" "║"      # Double lines
+)
+
+# Global variables
+TERM_WIDTH=$(tput cols)
+TERM_HEIGHT=$(tput lines)
+CONTENT_START=6
+CONTENT_WIDTH=$((TERM_WIDTH - 8))
+TOTAL_STEPS=12
 CURRENT_STEP=0
-SECONDS=0  # Built-in bash timer
 
-# Terminal styling functions
+# Terminal setup and restoration
 setup_terminal() {
-    # Save cursor position and clear screen
     tput smcup
     clear
-    
-    # Get terminal size
-    TERM_WIDTH=$(tput cols)
-    TERM_HEIGHT=$(tput lines)
     
     # Draw background
     for ((i=1; i<=TERM_HEIGHT; i++)); do
@@ -31,7 +42,6 @@ setup_terminal() {
         printf "%${TERM_WIDTH}s" "" | tr ' ' '░'
     done
     
-    # Draw header box
     draw_header_box
 }
 
@@ -39,96 +49,79 @@ restore_terminal() {
     tput rmcup
 }
 
+# UI Components
 draw_header_box() {
     local title="ITFlow-NG Installation"
-    local version="v${VERSION}"
     local box_width=$((TERM_WIDTH - 4))
     local padding=$(( (box_width - ${#title}) / 2 ))
     
-    # Position at top of screen
     tput cup 1 2
+    printf "${BOX_CHARS[0]}"
+    printf "%${box_width}s" "" | tr ' ' "${BOX_CHARS[1]}"
+    printf "${BOX_CHARS[2]}\n"
     
-    # Draw top border
-    printf "╔"
-    printf "%${box_width}s" "" | tr ' ' '═'
-    printf "╗"
-    
-    # Draw title
     tput cup 2 2
-    printf "║"
+    printf "${BOX_CHARS[3]}"
     printf "%${padding}s%s%${padding}s" "" "$title" ""
-    printf "║"
+    printf "${BOX_CHARS[3]}\n"
     
-    # Draw version
     tput cup 3 2
-    printf "║"
+    printf "${BOX_CHARS[3]}"
     printf "%${box_width}s" "" | tr ' ' ' '
-    printf "║"
+    printf "${BOX_CHARS[3]}\n"
     
-    # Draw bottom border
     tput cup 4 2
-    printf "╚"
-    printf "%${box_width}s" "" | tr ' ' '═'
-    printf "╝"
+    printf "${BOX_CHARS[6]}"
+    printf "%${box_width}s" "" | tr ' ' "${BOX_CHARS[1]}"
+    printf "${BOX_CHARS[8]}\n"
+}
+
+clear_content_area() {
+    local start_line=$CONTENT_START
+    local lines=10
     
-    # Reset cursor position for content
-    tput cup 6 0
+    for ((i=0; i<lines; i++)); do
+        tput cup $((start_line + i)) 2
+        printf "%${CONTENT_WIDTH}s" ""
+    done
 }
 
 draw_content_box() {
     local title="$1"
-    local start_line=6
-    local box_width=$((TERM_WIDTH - 4))
+    clear_content_area
     
-    # Draw top border with title
-    tput cup $start_line 2
-    printf "╔══[ %s ]" "$title"
-    printf "%$((box_width - ${#title} - 6))s" "" | tr ' ' '═'
-    printf "╗"
+    tput cup $CONTENT_START 2
+    printf "${BOX_CHARS[0]}══[ %s ]" "$title"
+    printf "%$(($CONTENT_WIDTH - ${#title} - 6))s" "" | tr ' ' "${BOX_CHARS[1]}"
+    printf "${BOX_CHARS[2]}"
     
-    # Draw sides
     for ((i=1; i<=3; i++)); do
-        tput cup $((start_line + i)) 2
-        printf "║"
-        printf "%${box_width}s" ""
-        printf "║"
+        tput cup $(($CONTENT_START + i)) 2
+        printf "${BOX_CHARS[3]}%${CONTENT_WIDTH}s${BOX_CHARS[3]}" ""
     done
     
-    # Draw bottom border
-    tput cup $((start_line + 4)) 2
-    printf "╚"
-    printf "%${box_width}s" "" | tr ' ' '═'
-    printf "╝"
+    tput cup $(($CONTENT_START + 4)) 2
+    printf "${BOX_CHARS[6]}"
+    printf "%${CONTENT_WIDTH}s" "" | tr ' ' "${BOX_CHARS[1]}"
+    printf "${BOX_CHARS[8]}"
     
-    # Position cursor for content
-    tput cup $((start_line + 2)) 4
+    tput cup $(($CONTENT_START + 2)) 4
 }
 
-# Progress indicator with spinner and detailed output
 show_progress() {
     CURRENT_STEP=$1
     local message=$2
     local spinner=( "⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏" )
     local percentage=$((CURRENT_STEP * 100 / TOTAL_STEPS))
     
-    # Clear the line and show progress
-    printf "\r\033[K"
+    draw_content_box "Progress"
+    tput cup $(($CONTENT_START + 1)) 4
     printf "${BLUE}[%2d/%2d]${NC} " "$CURRENT_STEP" "$TOTAL_STEPS"
-    
-    # Show spinner and message
     printf "${GREEN}${spinner[CURRENT_STEP % 10]}${NC} "
     printf "${message}... "
-    
-    # Show percentage
     printf "${YELLOW}(%3d%%)${NC}" "$percentage"
-    
-    # If it's the last step, add a newline
-    if [ "$CURRENT_STEP" -eq "$TOTAL_STEPS" ]; then
-        echo
-    fi
 }
 
-# Enhanced progress bar with box
 show_progress_bar() {
     local current=$1
     local total=$2
@@ -138,7 +131,6 @@ show_progress_bar() {
     local remaining=$((width - completed))
     local elapsed=$SECONDS
     
-    # Calculate ETA
     local eta="--:--"
     if [ "$current" -gt 0 ]; then
         local rate=$(bc <<< "scale=2; $elapsed / $current")
@@ -146,62 +138,52 @@ show_progress_bar() {
         eta=$(date -u -d "@$remaining_time" +"%M:%S")
     fi
     
-    # Draw progress box
-    draw_content_box "Progress"
-    
-    # Show progress bar
+    tput cup $(($CONTENT_START + 2)) 4
     printf "["
     printf "%${completed}s" | tr ' ' '█'
     if [ "$completed" -lt "$width" ]; then
         printf "▓"
         printf "%$((remaining-1))s" | tr ' ' '░'
     fi
-    printf "] "
-    
-    # Show percentage and ETA
-    printf "%3d%% " "$percentage"
+    printf "] %3d%% " "$percentage"
     printf "${BLUE}ETA: %s${NC}" "$eta"
 }
 
-# Version check with styled output
+# Installation Functions
 check_version() {
-    draw_content_box "Version Check"
-    echo -e "${BLUE}[•]${NC} Checking for latest version..."
+    show_progress "$((++CURRENT_STEP))" "Checking version"
     
-    LATEST_VERSION=$(curl -sSL https://raw.githubusercontent.com/o-psi/nestogy_install/refs/heads/main/version.txt)
-    if [[ "$LATEST_VERSION" == "404: Not Found" ]]; then
-        echo -e "${GREEN}✓${NC} Version check skipped - using local version: $VERSION"
-        return 0
-    elif [ "$VERSION" != "$LATEST_VERSION" ]; then
+    LATEST_VERSION=$(curl -sSL https://raw.githubusercontent.com/twetech/itflow-ng/main/version.txt)
+    if [[ "$VERSION" != "$LATEST_VERSION" ]]; then
         draw_content_box "Version Error"
-        echo -e "${RED}A newer version ($LATEST_VERSION) is available!"
-        echo -e "Please run the latest installer.${NC}"
+        echo -e "${RED}A newer version ($LATEST_VERSION) is available"
+        echo -e "Please update to the latest version${NC}"
         read -n 1 -p "Press any key to exit..."
         exit 1
     fi
-    echo -e "${GREEN}✓${NC} Running latest version"
+    echo -e "${GREEN}✓${NC} Version check passed"
 }
 
-# Script verification with styled output
 verify_script() {
-    draw_content_box "Script Verification"
-    echo -e "${BLUE}[•]${NC} Verifying script integrity..."
+    show_progress "$((++CURRENT_STEP))" "Verifying script"
     
-    SCRIPT_HASH=$(curl -sSL https://raw.githubusercontent.com/o-psi/nestogy_install/refs/heads/main/i.sh.sha256)
+    if [ "$TEST_MODE" = true ]; then
+        echo -e "${BLUE}[TEST] Script verification skipped${NC}"
+        return 0
+    fi
+    
+    SCRIPT_HASH=$(curl -sSL https://raw.githubusercontent.com/twetech/itflow-ng/main/i.sh.sha256)
     if ! echo "$SCRIPT_HASH $(basename $0)" | sha256sum -c - >/dev/null 2>&1; then
         draw_content_box "Verification Error"
-        echo -e "${RED}Script verification failed!"
-        echo -e "Script may have been tampered with.${NC}"
+        echo -e "${RED}Script verification failed${NC}"
         read -n 1 -p "Press any key to exit..."
         exit 1
     fi
     echo -e "${GREEN}✓${NC} Script verified"
 }
 
-# Root check with styled output
 check_root() {
-    draw_content_box "Permission Check"
-    echo -e "${BLUE}[•]${NC} Checking permissions..."
+    show_progress "$((++CURRENT_STEP))" "Checking permissions"
     
     if [[ $EUID -ne 0 ]]; then
         draw_content_box "Permission Error"
@@ -213,10 +195,8 @@ check_root() {
     echo -e "${GREEN}✓${NC} Root privileges confirmed"
 }
 
-# OS check with styled output
 check_os() {
-    draw_content_box "System Check"
-    echo -e "${BLUE}[•]${NC} Checking system compatibility..."
+    show_progress "$((++CURRENT_STEP))" "Checking system compatibility"
     
     if ! grep -E "24.04" "/etc/"*"release" &>/dev/null; then
         draw_content_box "System Error"
@@ -228,12 +208,11 @@ check_os() {
     echo -e "${GREEN}✓${NC} System compatible"
 }
 
-# Get domain with styled input
 get_domain() {
-    draw_content_box "Domain Configuration"
-    echo -e "${BLUE}[•]${NC} Domain Setup"
+    show_progress "$((++CURRENT_STEP))" "Configuring domain"
     
     while [[ $domain != *[.]* ]]; do
+        draw_content_box "Domain Setup"
         echo -e "${YELLOW}Please enter your domain (e.g., domain.com):${NC}"
         echo -ne "→ "
         read domain
@@ -241,9 +220,16 @@ get_domain() {
     echo -e "${GREEN}✓${NC} Domain set to: ${BLUE}${domain}${NC}"
 }
 
-# Modified installation steps with progress indicators
+generate_passwords() {
+    show_progress "$((++CURRENT_STEP))" "Generating secure passwords"
+    
+    mariadbpwd=$(tr -dc 'A-Za-z0-9' < /dev/urandom | fold -w 20 | head -n 1)
+    cronkey=$(tr -dc 'A-Za-z0-9' < /dev/urandom | fold -w 20 | head -n 1)
+    echo -e "${GREEN}✓${NC} Passwords generated"
+}
+
 install_packages() {
-    draw_content_box "Installing Packages"
+    show_progress "$((++CURRENT_STEP))" "Installing packages"
     
     local packages=(
         "apache2"
@@ -258,168 +244,84 @@ install_packages() {
         "libapache2-mod-md"
     )
     
-    local total_packages=${#packages[@]}
+    local total=${#packages[@]}
     local current=0
     
     for package in "${packages[@]}"; do
         ((current++))
-        show_progress_bar "$current" "$total_packages"
+        show_progress_bar $current $total
         
         if [ "$TEST_MODE" = true ]; then
-            sleep 0.5  # Simulate installation in test mode
+            sleep 0.5
         else
-            if ! apt-get install -y "$package" >/dev/null 2>&1; then
-                echo -e "\n${RED}Failed to install $package${NC}"
+            if ! apt-get install -y $package >/dev/null 2>&1; then
+                echo -e "${RED}Failed to install $package${NC}"
                 return 1
             fi
         fi
     done
     
-    echo -e "\n${GREEN}✓${NC} Packages installed successfully ($(($SECONDS - start_time))s)"
-    return 0
-}
-
-generate_passwords() {
-    mariadbpwd=$(tr -dc 'A-Za-z0-9' < /dev/urandom | fold -w 20 | head -n 1)
-    cronkey=$(tr -dc 'A-Za-z0-9' < /dev/urandom | fold -w 20 | head -n 1)
+    echo -e "${GREEN}✓${NC} Packages installed"
 }
 
 modify_php_ini() {
+    show_progress "$((++CURRENT_STEP))" "Configuring PHP"
+    
     if [ "$TEST_MODE" = true ]; then
-        echo -e "${BLUE}[TEST] Would modify:${NC}"
-        echo "PHP Version: $(php -v | head -n 1)"
-        echo "PHP INI Path: $PHP_INI_PATH"
-        echo "Would set:"
-        echo " - upload_max_filesize = 5000M"
-        echo " - post_max_size = 5000M"
+        echo -e "${BLUE}[TEST] Would modify PHP settings${NC}"
         return 0
     fi
     
-    # Original function code
     PHP_VERSION=$(php -v | head -n 1 | awk '{print $2}' | cut -d '.' -f 1,2)
     PHP_INI_PATH="/etc/php/${PHP_VERSION}/apache2/php.ini"
     
-    if ! sed -i 's/^;\?upload_max_filesize =.*/upload_max_filesize = 5000M/' $PHP_INI_PATH; then
-        echo -e "${RED}Failed to modify upload_max_filesize${NC}"
-        return 1
-    fi
+    local settings=(
+        "upload_max_filesize = 5000M"
+        "post_max_size = 5000M"
+    )
     
-    if ! sed -i 's/^;\?post_max_size =.*/post_max_size = 5000M/' $PHP_INI_PATH; then
-        echo -e "${RED}Failed to modify post_max_size${NC}"
-        return 1
-    fi
+    local total=${#settings[@]}
+    local current=0
     
-    return 0
+    for setting in "${settings[@]}"; do
+        ((current++))
+        show_progress_bar $current $total
+        local key=$(echo $setting | cut -d= -f1)
+        if ! sed -i "s/^;\?${key} =.*/${setting}/" $PHP_INI_PATH; then
+            echo -e "${RED}Failed to modify ${key}${NC}"
+            return 1
+        fi
+    done
+    
+    echo -e "${GREEN}✓${NC} PHP configured"
 }
 
 setup_webroot() {
+    show_progress "$((++CURRENT_STEP))" "Setting up webroot"
+    
     if [ "$TEST_MODE" = true ]; then
-        echo -e "${BLUE}[TEST] Would create:${NC}"
-        echo "Directory: /var/www/${domain}"
-        echo "Would set ownership: www-data:www-data"
+        echo -e "${BLUE}[TEST] Would create: /var/www/${domain}${NC}"
         return 0
     fi
     
-    if ! mkdir -p /var/www/${domain}; then
-        echo -e "${RED}Failed to create webroot directory${NC}"
+    if ! mkdir -p "/var/www/${domain}"; then
+        echo -e "${RED}Failed to create web directory${NC}"
         return 1
     fi
     
-    if ! chown -R www-data:www-data /var/www/; then
-        echo -e "${RED}Failed to set webroot permissions${NC}"
+    if ! chown -R www-data:www-data "/var/www/${domain}"; then
+        echo -e "${RED}Failed to set permissions${NC}"
         return 1
     fi
     
-    return 0
+    echo -e "${GREEN}✓${NC} Webroot configured"
 }
 
 setup_apache() {
-    if [ "$TEST_MODE" = true ]; then
-        echo -e "${BLUE}[TEST] Would configure Apache:${NC}"
-        echo "Would create: /etc/apache2/sites-available/${domain}.conf"
-        echo "Would enable site: ${domain}.conf"
-        echo "Would disable: 000-default.conf"
-        echo "Would restart Apache"
-        return 0
-    fi
-    
-    apache2_conf="<VirtualHost *:80>
-    ServerAdmin webmaster@localhost
-    ServerName ${domain}
-    DocumentRoot /var/www/${domain}
-    ErrorLog /\${APACHE_LOG_DIR}/error.log
-    CustomLog /\${APACHE_LOG_DIR}/access.log combined
-</VirtualHost>"
-
-    if ! echo "${apache2_conf}" > /etc/apache2/sites-available/${domain}.conf; then
-        echo -e "${RED}Failed to create Apache configuration${NC}"
-        return 1
-    fi
-
-    if ! a2ensite ${domain}.conf; then
-        echo -e "${RED}Failed to enable site${NC}"
-        return 1
-    fi
-    
-    if ! a2dissite 000-default.conf; then
-        echo -e "${RED}Failed to disable default site${NC}"
-        return 1
-    fi
-    
-    if ! systemctl restart apache2; then
-        echo -e "${RED}Failed to restart Apache${NC}"
-        return 1
-    fi
-    
-    return 0
-}
-
-clone_nestogy() {
-    # Clone the repository
-    git clone https://github.com/twetech/itflow-ng.git /var/www/nestogy
-    
-    # Navigate to the project directory
-    cd /var/www/${domain}
-    
-    # Install Composer if not already installed
-    if ! [ -x "$(command -v composer)" ]; then
-        echo -e "${BLUE}[•]${NC} Installing Composer..."
-        curl -sS https://getcomposer.org/installer | php
-        mv composer.phar /usr/local/bin/composer
-        chmod +x /usr/local/bin/composer
-    fi
-    
-    # Install dependencies
-    echo -e "${BLUE}[•]${NC} Installing PHP dependencies..."
-    composer install --no-dev --optimize-autoloader
-    
-    # Set proper permissions
-    chown -R www-data:www-data /var/www/${domain}
-    chmod -R 755 /var/www/${domain}
-}
-
-setup_cronjobs() {
-    (crontab -l 2>/dev/null; echo "0 2 * * * sudo -u www-data php /var/www/${domain}/cron.php ${cronkey}") | crontab -
-    (crontab -l 2>/dev/null; echo "* * * * * sudo -u www-data php /var/www/${domain}/cron_ticket_email_parser.php ${cronkey}") | crontab -
-    (crontab -l 2>/dev/null; echo "* * * * * sudo -u www-data php /var/www/${domain}/cron_mail_queue.php ${cronkey}") | crontab -
-}
-
-generate_cronkey_file() {
-    mkdir -p /var/www/${domain}/uploads/tmp
-    echo "<?php" > /var/www/${domain}/uploads/tmp/cronkey.php
-    echo "\$nestogy_install_script_generated_cronkey = \"${cronkey}\";" >> /var/www/${domain}/uploads/tmp/cronkey.php
-    echo "?>" >> /var/www/${domain}/uploads/tmp/cronkey.php
-    chown -R www-data:www-data /var/www/
-}
-
-setup_mysql() {
-    draw_content_box "Database Setup"
-    echo -e "${BLUE}[•]${NC} Configuring MySQL..."
+    show_progress "$((++CURRENT_STEP))" "Configuring Apache"
     
     if [ "$TEST_MODE" = true ]; then
-        echo -e "${BLUE}[TEST] Would configure MySQL:${NC}"
-        echo "Would create database: nestogy"
-        echo "Would create user: nestogy@localhost"
+        echo -e "${BLUE}[TEST] Would configure Apache${NC}"
         return 0
     fi
     
@@ -428,63 +330,182 @@ setup_mysql() {
     
     ((current++))
     show_progress_bar $current $steps
-    if ! mysql -e "CREATE DATABASE nestogy /*\!40100 DEFAULT CHARACTER SET utf8 */;"; then
-        echo -e "\n${RED}Failed to create database${NC}"
+    
+    # Create virtual host
+    cat > "/etc/apache2/sites-available/${domain}.conf" <<EOL
+<VirtualHost *:80>
+    ServerName ${domain}
+    DocumentRoot /var/www/${domain}
+    ErrorLog \${APACHE_LOG_DIR}/error.log
+    CustomLog \${APACHE_LOG_DIR}/access.log combined
+</VirtualHost>
+EOL
+    
+    ((current++))
+    show_progress_bar $current $steps
+    if ! a2ensite "${domain}.conf"; then
+        echo -e "${RED}Failed to enable site${NC}"
         return 1
     fi
     
     ((current++))
     show_progress_bar $current $steps
-    if ! mysql -e "CREATE USER nestogy@localhost IDENTIFIED BY '${mariadbpwd}';"; then
-        echo -e "\n${RED}Failed to create MySQL user${NC}"
+    if ! a2dissite 000-default.conf; then
+        echo -e "${RED}Failed to disable default site${NC}"
+        return 1
+    fi
+    
+    ((current++))
+    show_progress_bar $current $steps
+    if ! systemctl restart apache2; then
+        echo -e "${RED}Failed to restart Apache${NC}"
+        return 1
+    fi
+    
+    echo -e "${GREEN}✓${NC} Apache configured"
+}
+
+setup_mysql() {
+    show_progress "$((++CURRENT_STEP))" "Setting up database"
+    
+    if [ "$TEST_MODE" = true ]; then
+        echo -e "${BLUE}[TEST] Would configure MySQL${NC}"
+        return 0
+    fi
+    
+    local steps=4
+    local current=0
+    
+    ((current++))
+    show_progress_bar $current $steps
+    if ! mysql -e "CREATE DATABASE nestogy CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"; then
+        echo -e "${RED}Failed to create database${NC}"
+        return 1
+    fi
+    
+    ((current++))
+    show_progress_bar $current $steps
+    if ! mysql -e "CREATE USER 'nestogy'@'localhost' IDENTIFIED BY '${mariadbpwd}';"; then
+        echo -e "${RED}Failed to create user${NC}"
         return 1
     fi
     
     ((current++))
     show_progress_bar $current $steps
     if ! mysql -e "GRANT ALL PRIVILEGES ON nestogy.* TO 'nestogy'@'localhost';"; then
-        echo -e "\n${RED}Failed to grant privileges${NC}"
+        echo -e "${RED}Failed to grant privileges${NC}"
         return 1
     fi
     
     ((current++))
     show_progress_bar $current $steps
     if ! mysql -e "FLUSH PRIVILEGES;"; then
-        echo -e "\n${RED}Failed to flush privileges${NC}"
+        echo -e "${RED}Failed to flush privileges${NC}"
         return 1
     fi
     
-    echo -e "\n${GREEN}✓${NC} Database configured successfully"
-    return 0
+    echo -e "${GREEN}✓${NC} Database configured"
 }
 
-# Welcome message with styled output
-show_welcome_message() {
-    clear
-    echo -e "╔═══════════════════════════════════════════════════════════════╗"
-    echo -e "║                                                               ║"
-    echo -e "║                   ITFlow-NG Installation                      ║"
-    echo -e "║                                                               ║"
-    echo -e "╚═══════════════════════════════════════════════════════════════╝"
-    echo -e "\n                     Version: ${VERSION}\n"
-    echo -e "This script will:"
-    echo -e " • Install required system packages"
-    echo -e " • Configure Apache and PHP"
-    echo -e " • Set up MariaDB database"
-    echo -e " • Configure SSL certificates"
-    echo -e " • Set up automated tasks"
+clone_nestogy() {
+    show_progress "$((++CURRENT_STEP))" "Cloning ITFlow-NG"
     
-    echo -e "\n${YELLOW}Requirements:${NC}"
-    echo -e " ${BLUE}•${NC} Ubuntu 24.04"
-    echo -e " ${BLUE}•${NC} Root privileges"
-    echo -e " ${BLUE}•${NC} Domain name pointed to this server"
+    if [ "$TEST_MODE" = true ]; then
+        echo -e "${BLUE}[TEST] Would clone ITFlow-NG${NC}"
+        return 0
+    fi
     
-    echo -e "\n${YELLOW}Press ENTER to begin installation, or CTRL+C to exit...${NC}"
-    read
-    clear
+    local steps=3
+    local current=0
+    
+    # Clone repository
+    ((current++))
+    show_progress_bar $current $steps
+    if ! git clone https://github.com/twetech/itflow-ng.git "/var/www/${domain}" >/dev/null 2>&1; then
+        echo -e "${RED}Failed to clone repository${NC}"
+        return 1
+    fi
+    
+    # Set permissions
+    ((current++))
+    show_progress_bar $current $steps
+    if ! chown -R www-data:www-data "/var/www/${domain}"; then
+        echo -e "${RED}Failed to set permissions${NC}"
+        return 1
+    fi
+    
+    # Configure environment
+    ((current++))
+    show_progress_bar $current $steps
+    if ! cp "/var/www/${domain}/.env.example" "/var/www/${domain}/.env"; then
+        echo -e "${RED}Failed to create environment file${NC}"
+        return 1
+    fi
+    
+    echo -e "${GREEN}✓${NC} Repository cloned successfully"
 }
 
-# Final instructions with styled output
+setup_cronjobs() {
+    show_progress "$((++CURRENT_STEP))" "Setting up automated tasks"
+    
+    if [ "$TEST_MODE" = true ]; then
+        echo -e "${BLUE}[TEST] Would configure cron jobs${NC}"
+        return 0
+    fi
+    
+    local steps=2
+    local current=0
+    
+    # Create cron job
+    ((current++))
+    show_progress_bar $current $steps
+    local cron_line="*/5 * * * * curl -s https://${domain}/cron.php?key=${cronkey} >/dev/null 2>&1"
+    if ! (crontab -l 2>/dev/null | grep -Fq "$cron_line" || echo "$cron_line" | crontab -); then
+        echo -e "${RED}Failed to create cron job${NC}"
+        return 1
+    fi
+    
+    # Verify cron job
+    ((current++))
+    show_progress_bar $current $steps
+    if ! crontab -l | grep -Fq "$cron_line"; then
+        echo -e "${RED}Failed to verify cron job${NC}"
+        return 1
+    fi
+    
+    echo -e "${GREEN}✓${NC} Cron jobs configured"
+}
+
+generate_cronkey_file() {
+    show_progress "$((++CURRENT_STEP))" "Generating cron key"
+    
+    if [ "$TEST_MODE" = true ]; then
+        echo -e "${BLUE}[TEST] Would generate cron key file${NC}"
+        return 0
+    fi
+    
+    local steps=2
+    local current=0
+    
+    # Create key file
+    ((current++))
+    show_progress_bar $current $steps
+    if ! echo "<?php define('CRON_KEY', '${cronkey}');" > "/var/www/${domain}/includes/cronkey.php"; then
+        echo -e "${RED}Failed to create cron key file${NC}"
+        return 1
+    fi
+    
+    # Set permissions
+    ((current++))
+    show_progress_bar $current $steps
+    if ! chmod 640 "/var/www/${domain}/includes/cronkey.php"; then
+        echo -e "${RED}Failed to set cron key file permissions${NC}"
+        return 1
+    fi
+    
+    echo -e "${GREEN}✓${NC} Cron key generated"
+}
+
 print_final_instructions() {
     draw_content_box "Installation Complete! 🎉"
     
@@ -507,144 +528,13 @@ print_final_instructions() {
     read -n 1 -p "Press any key to exit..."
 }
 
-# Add test mode flag
-TEST_MODE=false
-
-# Define all test functions first
-test_install_packages() {
-    echo "Testing package installation prerequisites..."
-    
-    # Check if apt is available
-    if ! command -v apt-get >/dev/null 2>&1; then
-        echo "✗ apt-get is not available"
-        return 1
-    fi
-    
-    # Check if we can update package lists
-    if ! apt-get update >/dev/null 2>&1; then
-        echo "✗ Cannot update package lists"
-        return 1
-    fi
-    
-    echo "✓ Package installation prerequisites met"
-    return 0
-}
-
-test_modify_php_ini() {
-    echo "Testing PHP INI modifications..."
-    
-    # Check if PHP is installed
-    if ! command -v php >/dev/null 2>&1; then
-        echo "✗ PHP is not installed"
-        return 1
-    fi
-    
-    echo "✓ PHP configuration prerequisites met"
-    return 0
-}
-
-test_setup_webroot() {
-    echo "Testing webroot setup..."
-    
-    # Check if /var/www exists
-    if [ ! -d "/var/www" ]; then
-        echo "✗ /var/www directory does not exist"
-        return 1
-    fi
-    
-    echo "✓ Webroot prerequisites met"
-    return 0
-}
-
-test_setup_apache() {
-    echo "Testing Apache setup..."
-    
-    # Check if Apache is installed
-    if ! command -v apache2 >/dev/null 2>&1; then
-        echo "✗ Apache2 is not installed"
-        return 1
-    fi
-    
-    echo "✓ Apache prerequisites met"
-    return 0
-}
-
-test_setup_mysql() {
-    echo "Testing MySQL/MariaDB setup..."
-    
-    # Check if MySQL/MariaDB is installed
-    if ! command -v mysql >/dev/null 2>&1; then
-        echo "✗ MySQL/MariaDB is not installed"
-        return 1
-    fi
-    
-    echo "✓ MySQL prerequisites met"
-    return 0
-}
-
-test_setup_cronjobs() {
-    echo "Testing cronjob setup..."
-    
-    # Check if crontab is available
-    if ! command -v crontab >/dev/null 2>&1; then
-        echo "✗ Crontab is not available"
-        return 1
-    fi
-    
-    echo "✓ Crontab prerequisites met"
-    return 0
-}
-
-# Then define run_tests
-run_tests() {
-    if [ -n "$TEST_FUNCTION" ]; then
-        echo -e "${BLUE}Running test for: $TEST_FUNCTION${NC}"
-        $TEST_FUNCTION
-        return $?
-    fi
-
-    # Run all tests
-    local tests=(
-        "test_install_packages"
-        "test_modify_php_ini"
-        "test_setup_webroot"
-        "test_setup_apache"
-        "test_setup_mysql"
-        "test_setup_cronjobs"
-    )
-    
-    local failed=0
-    for test in "${tests[@]}"; do
-        echo -e "\n${BLUE}Running $test...${NC}"
-        if ! $test; then
-            echo -e "${RED}✗ $test failed${NC}"
-            failed=$((failed + 1))
-        else
-            echo -e "${GREEN}✓ $test passed${NC}"
-        fi
-    done
-    
-    if [ $failed -gt 0 ]; then
-        echo -e "\n${RED}$failed test(s) failed${NC}"
-        return 1
-    else
-        echo -e "\n${GREEN}All tests passed!${NC}"
-        return 0
-    fi
-}
-
-# Then define parse_args
+# Parse command line arguments
 parse_args() {
     while [[ $# -gt 0 ]]; do
         case $1 in
             --test)
                 TEST_MODE=true
                 shift
-                ;;
-            --test-function)
-                TEST_MODE=true
-                TEST_FUNCTION="$2"
-                shift 2
                 ;;
             --domain)
                 domain="$2"
@@ -658,7 +548,7 @@ parse_args() {
     done
 }
 
-# Finally, the main function
+# Main execution
 main() {
     parse_args "$@"
     
@@ -691,18 +581,16 @@ main() {
     check_os
     get_domain
     generate_passwords
-    
-    # Installation steps with progress tracking
     install_packages
     modify_php_ini
     setup_webroot
     setup_apache
+    setup_mysql
     clone_nestogy
     setup_cronjobs
     generate_cronkey_file
-    setup_mysql
     
-    # Final instructions
+    # Show final instructions
     print_final_instructions
     
     # Restore terminal
@@ -712,5 +600,5 @@ main() {
 # Add trap for clean exit
 trap 'restore_terminal' EXIT INT TERM
 
-# Call main with all arguments
+# Start installation
 main "$@"
