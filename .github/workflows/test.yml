@@ -24,11 +24,15 @@ jobs:
     - uses: actions/checkout@v2
 
     - name: Make script executable
-      run: chmod +x ./i.sh
+      run: |
+        ls -la
+        pwd
+        chmod +x ./i.sh
+        ls -la
 
     - name: Run test function
       run: |
-        sudo ./i.sh --test-function ${{ matrix.test-function }} --domain example.com
+        sudo bash ./i.sh --test-function ${{ matrix.test-function }} --domain example.com
 
   shellcheck:
     runs-on: ubuntu-latest
@@ -47,4 +51,4 @@ jobs:
     
     - name: Run full test mode
       run: |
-        sudo ./i.sh --test --domain example.com 
+        sudo bash ./i.sh --test --domain example.com 
