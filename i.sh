@@ -218,6 +218,7 @@ check_version() {
 }
 
 verify_script() {
+    SCRIPT_HASH=$(curl -sSL https://raw.githubusercontent.com/o-psi/nestogy_install/refs/heads/main/i.sh.sha256)
     if [ "$TEST_MODE" = true ]; then
         echo "Testing script verification..."
         
@@ -232,9 +233,9 @@ verify_script() {
             return 1
         fi
         
-        # Test HTTPS connectivity
-        if ! curl -s -f "https://github.com" >/dev/null; then
-            echo "Cannot make HTTPS requests"
+        # Test if we can access the hash file
+        if ! echo "$SCRIPT_HASH $(basename $0)" | sha256sum -c - >/dev/null 2>&1; then
+            echo "Hash mismatch"
             return 1
         fi
         
@@ -244,7 +245,6 @@ verify_script() {
     
     show_progress "$((++CURRENT_STEP))" "Verifying script"
     
-    SCRIPT_HASH=$(curl -sSL https://raw.githubusercontent.com/o-psi/nestogy_install/refs/heads/main/i.sh.sha256)
     if ! echo "$SCRIPT_HASH $(basename $0)" | sha256sum -c - >/dev/null 2>&1; then
         draw_content_box "Verification Error"
         echo -e "${RED}Script verification failed${NC}"
