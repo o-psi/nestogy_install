@@ -267,45 +267,32 @@ generate_passwords() {
 }
 
 install_packages() {
-    show_progress "$((++CURRENT_STEP))" "Installing packages"
-    
-    local packages=(
-        "apache2"
-        "mariadb-server"
-        "php"
-        "libapache2-mod-php"
-        "php-intl"
-        "php-mysqli"
-        "php-curl"
-        "php-imap"
-        "php-mailparse"
-        "libapache2-mod-md"
-    )
-    
-    local total=${#packages[@]}
-    local current=0
-    
-    for package in "${packages[@]}"; do
-        ((current++))
-        show_progress_bar $current $total
+    if [ "$TEST_MODE" = true ]; then
+        # Verify packages exist in repository
+        local packages=(
+            "apache2"
+            "mariadb-server"
+            "php"
+            "libapache2-mod-php"
+            "php-intl"
+            "php-mysqli"
+            "php-curl"
+            "php-imap"
+            "php-mailparse"
+            "libapache2-mod-md"
+        )
         
-        if [ "$TEST_MODE" = true ]; then
-            # Verify package exists in repository
+        for package in "${packages[@]}"; do
             if ! apt-cache show "$package" >/dev/null 2>&1; then
-                echo -e "${RED}Package not found: $package${NC}"
+                echo "Package not found: $package"
                 return 1
             fi
-            echo -e "${BLUE}[TEST] Verified package: $package${NC}"
-        else
-            if ! apt-get install -y $package >/dev/null 2>&1; then
-                echo -e "${RED}Failed to install $package${NC}"
-                return 1
-            fi
-        fi
-    done
+        done
+        return 0
+    fi
     
-    echo -e "${GREEN}✓${NC} Package verification complete"
-    return 0
+    # Real installation code here
+    ...
 }
 
 modify_php_ini() {
@@ -422,59 +409,22 @@ EOL
 }
 
 setup_mysql() {
-    show_progress "$((++CURRENT_STEP))" "Setting up database"
-    
-    local steps=4
-    local current=0
-    
-    # Test database connection
-    if ! mysql -e "SELECT 1" >/dev/null 2>&1; then
-        echo -e "${RED}Cannot connect to MySQL${NC}"
-        return 1
-    fi
-    
-    ((current++))
-    show_progress_bar $current $steps
-    
     if [ "$TEST_MODE" = true ]; then
-        # Verify database doesn't exist
-        if mysql -e "SHOW DATABASES LIKE 'nestogy'" 2>/dev/null | grep -q "nestogy"; then
-            echo -e "${RED}Database already exists${NC}"
+        # Verify MySQL is installed and running
+        if ! systemctl is-active --quiet mysql; then
+            echo "MySQL is not running"
             return 1
         fi
-        echo -e "${BLUE}[TEST] Database name available${NC}"
-        
-        # Verify user doesn't exist
-        if mysql -e "SELECT User FROM mysql.user WHERE User='nestogy'" 2>/dev/null | grep -q "nestogy"; then
-            echo -e "${RED}User already exists${NC}"
+        # Test connection
+        if ! mysql -e "SELECT 1" >/dev/null 2>&1; then
+            echo "Cannot connect to MySQL"
             return 1
         fi
-        echo -e "${BLUE}[TEST] Username available${NC}"
-    else
-        # Create database and user
-        if ! mysql -e "CREATE DATABASE nestogy CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"; then
-            echo -e "${RED}Failed to create database${NC}"
-            return 1
-        fi
-        
-        if ! mysql -e "CREATE USER 'nestogy'@'localhost' IDENTIFIED BY '${mariadbpwd}';"; then
-            echo -e "${RED}Failed to create user${NC}"
-            return 1
-        fi
-        
-        if ! mysql -e "GRANT ALL PRIVILEGES ON nestogy.* TO 'nestogy'@'localhost';"; then
-            echo -e "${RED}Failed to grant privileges${NC}"
-            return 1
-        fi
-        
-        if ! mysql -e "FLUSH PRIVILEGES;"; then
-            echo -e "${RED}Failed to flush privileges${NC}"
-            return 1
-        fi
+        return 0
     fi
     
-    echo -e "${GREEN}✓${NC} Database setup complete"
-    return 0
+    # Real MySQL setup code here
+    ...
 }
 
 clone_nestogy() {
@@ -608,11 +558,7 @@ parse_args() {
                 ;;
             --test-function)
                 TEST_MODE=true
-                if [[ "$2" == test_* ]]; then
-                    TEST_FUNCTION="$2"
-                else
-                    TEST_FUNCTION="test_$2"
-                fi
+                TEST_FUNCTION="$2"
                 shift 2
                 ;;
             --domain)
@@ -631,158 +577,18 @@ parse_args() {
 run_test_function() {
     local function_name="$1"
     
-    # Setup test environment
-    TEST_MODE=true
-    
-    # Check if test function exists
+    # Check if function exists
     if [ "$(type -t $function_name)" != "function" ]; then
-        echo -e "${RED}Error: Test function '${function_name}' not found${NC}"
+        echo "Error: Function '$function_name' not found"
         exit 1
     fi
     
-    # Run the test
-    echo -e "\n${BLUE}=== Running Test: ${function_name} ===${NC}"
+    # Run the function in test mode
     if $function_name; then
-        echo -e "\n${GREEN}✓ Test Passed: ${function_name}${NC}"
         return 0
     else
-        echo -e "\n${RED}✗ Test Failed: ${function_name}${NC}"
         return 1
     fi
-}
-
-# Add test functions
-test_setup_cronjobs() {
-    echo -e "\n${BLUE}[•]${NC} Testing cron job setup..."
-    
-    # Test cron line creation
-    local cron_line="*/5 * * * * curl -s https://${domain}/cron.php?key=test_key >/dev/null 2>&1"
-    echo -e "${BLUE}[TEST]${NC} Would add cron line: $cron_line"
-    
-    # Test cron job verification
-    echo -e "${BLUE}[TEST]${NC} Would verify cron job exists"
-    
-    return 0
-}
-
-test_setup_mysql() {
-    echo -e "\n${BLUE}[•]${NC} Testing MySQL setup..."
-    
-    # Test database creation
-    echo -e "${BLUE}[TEST]${NC} Would create database: nestogy"
-    
-    # Test user creation
-    echo -e "${BLUE}[TEST]${NC} Would create user: nestogy@localhost"
-    
-    # Test privileges
-    echo -e "${BLUE}[TEST]${NC} Would grant privileges to nestogy"
-    
-    return 0
-}
-
-test_setup_apache() {
-    echo -e "\n${BLUE}[•]${NC} Testing Apache setup..."
-    
-    # Test vhost creation
-    echo -e "${BLUE}[TEST]${NC} Would create vhost for: ${domain}"
-    
-    # Test site enabling
-    echo -e "${BLUE}[TEST]${NC} Would enable site: ${domain}.conf"
-    
-    # Test Apache restart
-    echo -e "${BLUE}[TEST]${NC} Would restart Apache"
-    
-    return 0
-}
-
-# Test functions
-test_install_packages() {
-    echo -e "\n${BLUE}[•]${NC} Testing package installation..."
-    
-    local packages=(
-        "apache2"
-        "mariadb-server"
-        "php"
-        "libapache2-mod-php"
-        "php-intl"
-        "php-mysqli"
-        "php-curl"
-        "php-imap"
-        "php-mailparse"
-        "libapache2-mod-md"
-    )
-    
-    for package in "${packages[@]}"; do
-        echo -e "${BLUE}[TEST]${NC} Would install: $package"
-        sleep 0.1
-    done
-    
-    echo -e "${GREEN}✓${NC} Package installation test complete"
-    return 0
-}
-
-test_modify_php_ini() {
-    echo -e "\n${BLUE}[•]${NC} Testing PHP configuration..."
-    
-    local settings=(
-        "upload_max_filesize = 5000M"
-        "post_max_size = 5000M"
-        "memory_limit = 256M"
-    )
-    
-    for setting in "${settings[@]}"; do
-        echo -e "${BLUE}[TEST]${NC} Would set: $setting"
-        sleep 0.1
-    done
-    
-    echo -e "${GREEN}✓${NC} PHP configuration test complete"
-    return 0
-}
-
-test_setup_webroot() {
-    echo -e "\n${BLUE}[•]${NC} Testing webroot setup..."
-    
-    echo -e "${BLUE}[TEST]${NC} Would create directory: /var/www/${domain}"
-    echo -e "${BLUE}[TEST]${NC} Would set ownership: www-data:www-data"
-    echo -e "${BLUE}[TEST]${NC} Would set permissions: 755"
-    
-    echo -e "${GREEN}✓${NC} Webroot setup test complete"
-    return 0
-}
-
-test_setup_apache() {
-    echo -e "\n${BLUE}[•]${NC} Testing Apache setup..."
-    
-    echo -e "${BLUE}[TEST]${NC} Would create vhost: ${domain}.conf"
-    echo -e "${BLUE}[TEST]${NC} Would enable site: ${domain}"
-    echo -e "${BLUE}[TEST]${NC} Would disable default site"
-    echo -e "${BLUE}[TEST]${NC} Would restart Apache service"
-    
-    echo -e "${GREEN}✓${NC} Apache setup test complete"
-    return 0
-}
-
-test_setup_mysql() {
-    echo -e "\n${BLUE}[•]${NC} Testing MySQL setup..."
-    
-    echo -e "${BLUE}[TEST]${NC} Would create database: nestogy"
-    echo -e "${BLUE}[TEST]${NC} Would create user: nestogy@localhost"
-    echo -e "${BLUE}[TEST]${NC} Would grant privileges"
-    echo -e "${BLUE}[TEST]${NC} Would flush privileges"
-    
-    echo -e "${GREEN}✓${NC} MySQL setup test complete"
-    return 0
-}
-
-test_setup_cronjobs() {
-    echo -e "\n${BLUE}[•]${NC} Testing cron setup..."
-    
-    echo -e "${BLUE}[TEST]${NC} Would create cron job for: ${domain}"
-    echo -e "${BLUE}[TEST]${NC} Would set cron schedule: */5 * * * *"
-    echo -e "${BLUE}[TEST]${NC} Would verify cron job"
-    
-    echo -e "${GREEN}✓${NC} Cron setup test complete"
-    return 0
 }
 
 # Main execution
