@@ -193,7 +193,7 @@ check_version() {
         echo "Testing version check..."
         
         # Test if we can access the version file
-        if ! curl -s -f "https://raw.githubusercontent.com/twetech/itflow-ng/main/version.txt" >/dev/null; then
+        if ! curl -s -f "https://raw.githubusercontent.com/o-psi/nestogy_install/refs/heads/main/version.txt" >/dev/null; then
             echo "Cannot access version file"
             return 1
         fi
@@ -205,7 +205,7 @@ check_version() {
     # Real version check code
     show_progress "$((++CURRENT_STEP))" "Checking version"
     
-    LATEST_VERSION=$(curl -sSL https://raw.githubusercontent.com/twetech/itflow-ng/main/version.txt)
+    LATEST_VERSION=$(curl -sSL https://raw.githubusercontent.com/o-psi/nestogy_install/refs/heads/main/version.txt)
     if [[ "$VERSION" != "$LATEST_VERSION" ]]; then
         draw_content_box "Version Error"
         echo -e "${RED}A newer version ($LATEST_VERSION) is available"
