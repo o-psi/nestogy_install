@@ -6,14 +6,16 @@ on:
       - 'itflow_install.sh'
     branches:
       - main
+  workflow_dispatch:  # Allows manual triggering
+
+permissions:
+  contents: write    # Explicitly set permissions
 
 jobs:
   update-checksum:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Calculate SHA256
         run: |
@@ -21,7 +23,7 @@ jobs:
 
       - name: Commit and push if changed
         run: |
-          git config --global user.name 'GitHub Action'
-          git config --global user.email 'action@github.com'
+          git config --local user.name "GitHub Action"
+          git config --local user.email "action@github.com"
           git add itflow_install.sh.sha256
           git diff --quiet && git diff --staged --quiet || (git commit -m "Update SHA256 checksum" && git push) 
