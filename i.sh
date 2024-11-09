@@ -334,35 +334,95 @@ print_final_instructions() {
 # Add test mode flag
 TEST_MODE=false
 
-# Parse command line arguments
-parse_args() {
-    while [[ $# -gt 0 ]]; do
-        case $1 in
-            --test)
-                TEST_MODE=true
-                shift
-                ;;
-            --test-function)
-                TEST_MODE=true
-                TEST_FUNCTION="$2"
-                shift 2
-                ;;
-            --domain)
-                domain="$2"
-                shift 2
-                ;;
-            *)
-                echo "Unknown parameter: $1"
-                exit 1
-                ;;
-        esac
-    done
+# Define all test functions first
+test_install_packages() {
+    echo "Testing package installation prerequisites..."
+    
+    # Check if apt is available
+    if ! command -v apt-get >/dev/null 2>&1; then
+        echo "✗ apt-get is not available"
+        return 1
+    fi
+    
+    # Check if we can update package lists
+    if ! apt-get update >/dev/null 2>&1; then
+        echo "✗ Cannot update package lists"
+        return 1
+    fi
+    
+    echo "✓ Package installation prerequisites met"
+    return 0
 }
 
-# Add test runner function
+test_modify_php_ini() {
+    echo "Testing PHP INI modifications..."
+    
+    # Check if PHP is installed
+    if ! command -v php >/dev/null 2>&1; then
+        echo "✗ PHP is not installed"
+        return 1
+    fi
+    
+    echo "✓ PHP configuration prerequisites met"
+    return 0
+}
+
+test_setup_webroot() {
+    echo "Testing webroot setup..."
+    
+    # Check if /var/www exists
+    if [ ! -d "/var/www" ]; then
+        echo "✗ /var/www directory does not exist"
+        return 1
+    fi
+    
+    echo "✓ Webroot prerequisites met"
+    return 0
+}
+
+test_setup_apache() {
+    echo "Testing Apache setup..."
+    
+    # Check if Apache is installed
+    if ! command -v apache2 >/dev/null 2>&1; then
+        echo "✗ Apache2 is not installed"
+        return 1
+    fi
+    
+    echo "✓ Apache prerequisites met"
+    return 0
+}
+
+test_setup_mysql() {
+    echo "Testing MySQL/MariaDB setup..."
+    
+    # Check if MySQL/MariaDB is installed
+    if ! command -v mysql >/dev/null 2>&1; then
+        echo "✗ MySQL/MariaDB is not installed"
+        return 1
+    fi
+    
+    echo "✓ MySQL prerequisites met"
+    return 0
+}
+
+test_setup_cronjobs() {
+    echo "Testing cronjob setup..."
+    
+    # Check if crontab is available
+    if ! command -v crontab >/dev/null 2>&1; then
+        echo "✗ Crontab is not available"
+        return 1
+    fi
+    
+    echo "✓ Crontab prerequisites met"
+    return 0
+}
+
+# Then define run_tests
 run_tests() {
     if [ -n "$TEST_FUNCTION" ]; then
-        echo "Running test for: $TEST_FUNCTION"
+        echo -e "${BLUE}Running test for: $TEST_FUNCTION${NC}"
         $TEST_FUNCTION
         return $?
     fi
@@ -397,7 +457,32 @@ run_tests() {
     fi
 }
 
-# Main execution
+# Then define parse_args
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --test)
+                TEST_MODE=true
+                shift
+                ;;
+            --test-function)
+                TEST_MODE=true
+                TEST_FUNCTION="$2"
+                shift 2
+                ;;
+            --domain)
+                domain="$2"
+                shift 2
+                ;;
+            *)
+                echo "Unknown parameter: $1"
+                exit 1
+                ;;
+        esac
+    done
+}
+
+# Finally, the main function
 main() {
     parse_args "$@"
 
