@@ -1,0 +1,50 @@
+name: Script Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        test-function:
+          - test_install_packages
+          - test_modify_php_ini
+          - test_setup_webroot
+          - test_setup_apache
+          - test_clone_nestogy
+          - test_setup_mysql
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Make script executable
+      run: chmod +x ./i.sh
+
+    - name: Run test function
+      run: |
+        sudo ./i.sh --test-function ${{ matrix.test-function }} --domain example.com
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    
+    - name: Run ShellCheck
+      uses: ludeeus/action-shellcheck@master
+      with:
+        scandir: '.'
+        
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    
+    - name: Run full test mode
+      run: |
+        sudo ./i.sh --test --domain example.com 

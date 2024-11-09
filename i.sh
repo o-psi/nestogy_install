@@ -85,6 +85,10 @@ get_domain() {
 
 # Modified installation steps with progress indicators
 install_packages() {
+    if [ "$TEST_MODE" = true ]; then
+        echo "TEST: Would install packages"
+        return 0
+    fi
     show_progress "1" "Installing system packages"
     
     echo -e "${BLUE}[•]${NC} Updating package lists..."
@@ -240,24 +244,92 @@ print_final_instructions() {
     echo -e "\nFor support, visit: https://github.com/twetech/itflow-ng/issues\n"
 }
 
-# Main execution flow
-show_welcome_message
-check_version
-verify_script
-check_root
-check_os
-get_domain
-generate_passwords
+# Add test mode flag
+TEST_MODE=false
 
-# Execute installation steps with progress tracking
-install_packages
-modify_php_ini
-setup_webroot
-setup_apache
-clone_nestogy
-setup_cronjobs
-generate_cronkey_file
-setup_mysql
+# Parse command line arguments
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --test)
+                TEST_MODE=true
+                shift
+                ;;
+            --test-function)
+                TEST_MODE=true
+                TEST_FUNCTION="$2"
+                shift 2
+                ;;
+            --domain)
+                domain="$2"
+                shift 2
+                ;;
+            *)
+                echo "Unknown parameter: $1"
+                exit 1
+                ;;
+        esac
+    done
+}
 
-# Show final instructions
-print_final_instructions
+# Add test runner function
+run_tests() {
+    if [ -n "$TEST_FUNCTION" ]; then
+        echo "Running test for: $TEST_FUNCTION"
+        $TEST_FUNCTION
+        exit $?
+    fi
+
+    # Run all tests
+    test_install_packages
+    test_modify_php_ini
+    test_setup_webroot
+    # ... add more test functions ...
+}
+
+# Add individual test functions
+test_install_packages() {
+    echo "Testing package installation..."
+    if command -v apache2 >/dev/null 2>&1; then
+        echo "✓ Apache2 is available"
+    else
+        echo "✗ Apache2 not found"
+        return 1
+    fi
+    # Add more package checks...
+}
+
+# Modify main execution flow
+main() {
+    parse_args "$@"
+
+    if [ "$TEST_MODE" = true ]; then
+        run_tests
+        exit $?
+    fi
+
+    # Regular execution flow
+    show_welcome_message
+    check_version
+    verify_script
+    check_root
+    check_os
+    get_domain
+    generate_passwords
+
+    # Execute installation steps with progress tracking
+    install_packages
+    modify_php_ini
+    setup_webroot
+    setup_apache
+    clone_nestogy
+    setup_cronjobs
+    generate_cronkey_file
+    setup_mysql
+
+    # Show final instructions
+    print_final_instructions
+}
+
+# Call main with all arguments
+main "$@"
