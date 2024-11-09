@@ -326,7 +326,7 @@ generate_passwords() {
         if [ ! -r "/dev/urandom" ]; then
             echo "Cannot access /dev/urandom"
             return 1
-        }
+        fi
         
         echo "✓ Password generation prerequisites verified"
         return 0
