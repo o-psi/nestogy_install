@@ -93,7 +93,7 @@ install_packages() {
         echo "apt-get -y upgrade"
         echo "apt-get install -y apache2 mariadb-server php libapache2-mod-php..."
         return 0
-    }
+    fi
     
     echo -e "${BLUE}[•]${NC} Updating package lists..."
     if ! apt-get update; then
@@ -132,7 +132,7 @@ modify_php_ini() {
         echo " - upload_max_filesize = 5000M"
         echo " - post_max_size = 5000M"
         return 0
-    }
+    fi
     
     # Original function code
     PHP_VERSION=$(php -v | head -n 1 | awk '{print $2}' | cut -d '.' -f 1,2)
@@ -157,7 +157,7 @@ setup_webroot() {
         echo "Directory: /var/www/${domain}"
         echo "Would set ownership: www-data:www-data"
         return 0
-    }
+    fi
     
     if ! mkdir -p /var/www/${domain}; then
         echo -e "${RED}Failed to create webroot directory${NC}"
@@ -180,7 +180,7 @@ setup_apache() {
         echo "Would disable: 000-default.conf"
         echo "Would restart Apache"
         return 0
-    }
+    fi
     
     apache2_conf="<VirtualHost *:80>
     ServerAdmin webmaster@localhost
@@ -258,7 +258,7 @@ setup_mysql() {
         echo "Would create user: nestogy@localhost"
         echo "Would grant privileges on nestogy.* to nestogy@localhost"
         return 0
-    }
+    fi
     
     if ! mysql -e "CREATE DATABASE nestogy /*\!40100 DEFAULT CHARACTER SET utf8 */;"; then
         echo -e "${RED}Failed to create database${NC}"
