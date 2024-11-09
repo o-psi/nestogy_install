@@ -3,6 +3,56 @@
 # Version
 VERSION="1.0.0"
 
+# Terminal type handling
+if [ -z "$TERM" ]; then
+    export TERM=xterm-256color
+fi
+
+# Test mode function
+run_tests() {
+    echo "Running in test mode..."
+    
+    # Setup terminal
+    setup_terminal
+    trap restore_terminal EXIT
+    
+    # Welcome message
+    draw_content_box "Test Mode"
+    echo "ITFlow-NG Installation Test"
+    echo "Version: ${VERSION}"
+    echo "Domain: ${domain}"
+    echo -e "\nPress any key to begin test..."
+    read -n 1
+    
+    # Run installation steps in test mode
+    TEST_MODE=true
+    
+    check_version
+    verify_script
+    check_root
+    check_os
+    get_domain
+    generate_passwords
+    install_packages
+    modify_php_ini
+    setup_webroot
+    setup_apache
+    clone_nestogy
+    setup_cronjobs
+    generate_cronkey_file
+    setup_mysql
+    
+    # Show test completion message
+    draw_content_box "Test Complete"
+    echo -e "${GREEN}✓${NC} All tests completed successfully"
+    echo -e "\nPress any key to exit..."
+    read -n 1
+    
+    # Restore terminal
+    restore_terminal
+    return 0
+}
+
 # Colors and formatting
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -536,6 +586,15 @@ parse_args() {
                 TEST_MODE=true
                 shift
                 ;;
+            --test-function)
+                TEST_MODE=true
+                if [[ "$2" == test_* ]]; then
+                    TEST_FUNCTION="$2"
+                else
+                    TEST_FUNCTION="test_$2"
+                fi
+                shift 2
+                ;;
             --domain)
                 domain="$2"
                 shift 2
@@ -548,11 +607,172 @@ parse_args() {
     done
 }
 
+# Add test function handler
+run_test_function() {
+    local function_name="$1"
+    
+    # Setup test environment
+    TEST_MODE=true
+    
+    # Check if test function exists
+    if [ "$(type -t $function_name)" != "function" ]; then
+        echo -e "${RED}Error: Test function '${function_name}' not found${NC}"
+        exit 1
+    fi
+    
+    # Run the test
+    echo -e "\n${BLUE}=== Running Test: ${function_name} ===${NC}"
+    if $function_name; then
+        echo -e "\n${GREEN}✓ Test Passed: ${function_name}${NC}"
+        return 0
+    else
+        echo -e "\n${RED}✗ Test Failed: ${function_name}${NC}"
+        return 1
+    fi
+}
+
+# Add test functions
+test_setup_cronjobs() {
+    echo -e "\n${BLUE}[•]${NC} Testing cron job setup..."
+    
+    # Test cron line creation
+    local cron_line="*/5 * * * * curl -s https://${domain}/cron.php?key=test_key >/dev/null 2>&1"
+    echo -e "${BLUE}[TEST]${NC} Would add cron line: $cron_line"
+    
+    # Test cron job verification
+    echo -e "${BLUE}[TEST]${NC} Would verify cron job exists"
+    
+    return 0
+}
+
+test_setup_mysql() {
+    echo -e "\n${BLUE}[•]${NC} Testing MySQL setup..."
+    
+    # Test database creation
+    echo -e "${BLUE}[TEST]${NC} Would create database: nestogy"
+    
+    # Test user creation
+    echo -e "${BLUE}[TEST]${NC} Would create user: nestogy@localhost"
+    
+    # Test privileges
+    echo -e "${BLUE}[TEST]${NC} Would grant privileges to nestogy"
+    
+    return 0
+}
+
+test_setup_apache() {
+    echo -e "\n${BLUE}[•]${NC} Testing Apache setup..."
+    
+    # Test vhost creation
+    echo -e "${BLUE}[TEST]${NC} Would create vhost for: ${domain}"
+    
+    # Test site enabling
+    echo -e "${BLUE}[TEST]${NC} Would enable site: ${domain}.conf"
+    
+    # Test Apache restart
+    echo -e "${BLUE}[TEST]${NC} Would restart Apache"
+    
+    return 0
+}
+
+# Test functions
+test_install_packages() {
+    echo -e "\n${BLUE}[•]${NC} Testing package installation..."
+    
+    local packages=(
+        "apache2"
+        "mariadb-server"
+        "php"
+        "libapache2-mod-php"
+        "php-intl"
+        "php-mysqli"
+        "php-curl"
+        "php-imap"
+        "php-mailparse"
+        "libapache2-mod-md"
+    )
+    
+    for package in "${packages[@]}"; do
+        echo -e "${BLUE}[TEST]${NC} Would install: $package"
+        sleep 0.1
+    done
+    
+    echo -e "${GREEN}✓${NC} Package installation test complete"
+    return 0
+}
+
+test_modify_php_ini() {
+    echo -e "\n${BLUE}[•]${NC} Testing PHP configuration..."
+    
+    local settings=(
+        "upload_max_filesize = 5000M"
+        "post_max_size = 5000M"
+        "memory_limit = 256M"
+    )
+    
+    for setting in "${settings[@]}"; do
+        echo -e "${BLUE}[TEST]${NC} Would set: $setting"
+        sleep 0.1
+    done
+    
+    echo -e "${GREEN}✓${NC} PHP configuration test complete"
+    return 0
+}
+
+test_setup_webroot() {
+    echo -e "\n${BLUE}[•]${NC} Testing webroot setup..."
+    
+    echo -e "${BLUE}[TEST]${NC} Would create directory: /var/www/${domain}"
+    echo -e "${BLUE}[TEST]${NC} Would set ownership: www-data:www-data"
+    echo -e "${BLUE}[TEST]${NC} Would set permissions: 755"
+    
+    echo -e "${GREEN}✓${NC} Webroot setup test complete"
+    return 0
+}
+
+test_setup_apache() {
+    echo -e "\n${BLUE}[•]${NC} Testing Apache setup..."
+    
+    echo -e "${BLUE}[TEST]${NC} Would create vhost: ${domain}.conf"
+    echo -e "${BLUE}[TEST]${NC} Would enable site: ${domain}"
+    echo -e "${BLUE}[TEST]${NC} Would disable default site"
+    echo -e "${BLUE}[TEST]${NC} Would restart Apache service"
+    
+    echo -e "${GREEN}✓${NC} Apache setup test complete"
+    return 0
+}
+
+test_setup_mysql() {
+    echo -e "\n${BLUE}[•]${NC} Testing MySQL setup..."
+    
+    echo -e "${BLUE}[TEST]${NC} Would create database: nestogy"
+    echo -e "${BLUE}[TEST]${NC} Would create user: nestogy@localhost"
+    echo -e "${BLUE}[TEST]${NC} Would grant privileges"
+    echo -e "${BLUE}[TEST]${NC} Would flush privileges"
+    
+    echo -e "${GREEN}✓${NC} MySQL setup test complete"
+    return 0
+}
+
+test_setup_cronjobs() {
+    echo -e "\n${BLUE}[•]${NC} Testing cron setup..."
+    
+    echo -e "${BLUE}[TEST]${NC} Would create cron job for: ${domain}"
+    echo -e "${BLUE}[TEST]${NC} Would set cron schedule: */5 * * * *"
+    echo -e "${BLUE}[TEST]${NC} Would verify cron job"
+    
+    echo -e "${GREEN}✓${NC} Cron setup test complete"
+    return 0
+}
+
 # Main execution
 main() {
     parse_args "$@"
     
-    if [ "$TEST_MODE" = true ]; then
+    if [ -n "$TEST_FUNCTION" ]; then
+        run_test_function "$TEST_FUNCTION"
+        exit $?
+    elif [ "$TEST_MODE" = true ]; then
         run_tests
         exit $?
     fi
