@@ -189,6 +189,20 @@ show_progress_bar() {
 
 # Installation Functions
 check_version() {
+    if [ "$TEST_MODE" = true ]; then
+        echo "Testing version check..."
+        
+        # Test if we can access the version file
+        if ! curl -s -f "https://raw.githubusercontent.com/twetech/itflow-ng/main/version.txt" >/dev/null; then
+            echo "Cannot access version file"
+            return 1
+        fi
+        
+        echo "✓ Version check passed"
+        return 0
+    fi
+    
+    # Real version check code
     show_progress "$((++CURRENT_STEP))" "Checking version"
     
     LATEST_VERSION=$(curl -sSL https://raw.githubusercontent.com/twetech/itflow-ng/main/version.txt)
@@ -196,10 +210,11 @@ check_version() {
         draw_content_box "Version Error"
         echo -e "${RED}A newer version ($LATEST_VERSION) is available"
         echo -e "Please update to the latest version${NC}"
-        read -n 1 -p "Press any key to exit..."
-        exit 1
+        return 1
     fi
+    
     echo -e "${GREEN}✓${NC} Version check passed"
+    return 0
 }
 
 verify_script() {
