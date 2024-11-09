@@ -249,16 +249,31 @@ check_root() {
 }
 
 check_os() {
+    if [ "$TEST_MODE" = true ]; then
+        echo "Testing OS compatibility..."
+        
+        # For GitHub Actions, we'll check for Ubuntu in general
+        if ! grep -E "Ubuntu" "/etc/"*"release" &>/dev/null; then
+            echo "System is not Ubuntu"
+            return 1
+        fi
+        
+        echo "✓ OS compatibility check passed"
+        return 0
+    fi
+    
+    # Real OS check code
     show_progress "$((++CURRENT_STEP))" "Checking system compatibility"
     
     if ! grep -E "24.04" "/etc/"*"release" &>/dev/null; then
         draw_content_box "System Error"
         echo -e "${RED}Unsupported OS detected"
         echo -e "Ubuntu 24.04 is required${NC}"
-        read -n 1 -p "Press any key to exit..."
-        exit 1
+        return 1
     fi
+    
     echo -e "${GREEN}✓${NC} System compatible"
+    return 0
 }
 
 get_domain() {
