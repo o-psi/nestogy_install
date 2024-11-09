@@ -21,20 +21,20 @@ run_tests() {
     echo
     
     # Run installation steps in test mode
-    check_version_test
-    verify_script_test
-    check_root_test
-    check_os_test
-    get_domain_test
-    generate_passwords_test
-    install_packages_test
-    modify_php_ini_test
-    setup_webroot_test
-    setup_apache_test
-    clone_nestogy_test
-    setup_cronjobs_test
-    generate_cronkey_test
-    setup_mysql_test
+    check_version || exit 1
+    verify_script || exit 1
+    check_root || exit 1
+    check_os || exit 1
+    get_domain || exit 1
+    generate_passwords || exit 1
+    install_packages || exit 1
+    modify_php_ini || exit 1
+    setup_webroot || exit 1
+    setup_apache || exit 1
+    clone_nestogy || exit 1
+    setup_cronjobs || exit 1
+    generate_cronkey_file || exit 1
+    setup_mysql || exit 1
     
     echo
     echo "✓ All tests completed successfully"
@@ -326,7 +326,7 @@ generate_passwords() {
         if [ ! -r "/dev/urandom" ]; then
             echo "Cannot access /dev/urandom"
             return 1
-        fi
+        }
         
         echo "✓ Password generation prerequisites verified"
         return 0
