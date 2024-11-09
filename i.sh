@@ -362,42 +362,42 @@ parse_args() {
 # Add test runner function
 run_tests() {
     if [ -n "$TEST_FUNCTION" ]; then
-        echo -e "${BLUE}Running test for: $TEST_FUNCTION${NC}"
+        echo "Running test for: $TEST_FUNCTION"
         $TEST_FUNCTION
         return $?
     fi
 
-    local functions=(
-        "install_packages"
-        "modify_php_ini"
-        "setup_webroot"
-        "setup_apache"
-        "setup_mysql"
-        "setup_cronjobs"
-        "generate_cronkey_file"
+    # Run all tests
+    local tests=(
+        "test_install_packages"
+        "test_modify_php_ini"
+        "test_setup_webroot"
+        "test_setup_apache"
+        "test_setup_mysql"
+        "test_setup_cronjobs"
     )
     
     local failed=0
-    for func in "${functions[@]}"; do
-        echo -e "\n${BLUE}Testing $func...${NC}"
-        if ! $func; then
-            echo -e "${RED}✗ $func failed${NC}"
+    for test in "${tests[@]}"; do
+        echo -e "\n${BLUE}Running $test...${NC}"
+        if ! $test; then
+            echo -e "${RED}✗ $test failed${NC}"
             failed=$((failed + 1))
         else
-            echo -e "${GREEN}✓ $func passed${NC}"
+            echo -e "${GREEN}✓ $test passed${NC}"
         fi
     done
     
     if [ $failed -gt 0 ]; then
-        echo -e "\n${RED}$failed function(s) failed${NC}"
+        echo -e "\n${RED}$failed test(s) failed${NC}"
         return 1
     else
-        echo -e "\n${GREEN}All functions passed!${NC}"
+        echo -e "\n${GREEN}All tests passed!${NC}"
         return 0
     fi
 }
 
-# Modify main execution flow
+# Main execution
 main() {
     parse_args "$@"
 
