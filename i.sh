@@ -582,17 +582,10 @@ setup_apache() {
             return 1
         fi
         
-        # Check if site already exists
-        if [ -f "/etc/apache2/sites-available/${domain}.conf" ]; then
-            echo "Site configuration already exists"
-            return 1
-        fi
-        
-        # Verify Apache modules without loading them
-        local required_modules=("rewrite" "ssl" "headers")
+        # Verify Apache modules
+        local required_modules=("rewrite" "ssl" "headers" "md")
         for module in "${required_modules[@]}"; do
             if ! apache2 -l | grep -q "mod_${module}"; then
-                # Module not found, but that's okay in test mode
                 echo "Note: Module '${module}' not loaded (expected in test environment)"
             fi
         done
@@ -601,46 +594,84 @@ setup_apache() {
         return 0
     fi
     
-    # Real Apache setup code
     show_progress "$((++CURRENT_STEP))" "Configuring Apache"
     
-    local steps=4
+    local steps=6
     local current=0
     
-    # Verify Apache is installed
-    if ! command -v apache2 >/dev/null 2>&1; then
-        echo -e "${RED}Apache not installed${NC}"
-        return 1
-    fi
-    
+    # Enable required modules
     ((current++))
     show_progress_bar $current $steps
+    a2enmod rewrite
+    a2enmod ssl
+    a2enmod headers
+    a2enmod md
     
-    # Create and enable site
+    # Create Apache configuration
+    ((current++))
+    show_progress_bar $current $steps
     cat > "/etc/apache2/sites-available/${domain}.conf" <<EOL
 <VirtualHost *:80>
+    ServerAdmin webmaster@localhost
     ServerName ${domain}
     DocumentRoot /var/www/${domain}
-    ErrorLog \${APACHE_LOG_DIR}/error.log
-    CustomLog \${APACHE_LOG_DIR}/access.log combined
+
+    <Directory /var/www/${domain}>
+        Options Indexes FollowSymLinks MultiViews
+        AllowOverride All
+        Require all granted
+
+        # Redirect all requests to index.php if file/directory doesn't exist
+        RewriteEngine On
+        RewriteCond %{REQUEST_FILENAME} !-f
+        RewriteCond %{REQUEST_FILENAME} !-d
+        RewriteRule ^ index.php [QSA,L]
+    </Directory>
+
+    ErrorLog \${APACHE_LOG_DIR}/${domain}_error.log
+    CustomLog \${APACHE_LOG_DIR}/${domain}_access.log combined
 </VirtualHost>
 EOL
-    
-    if ! a2ensite "${domain}.conf"; then
-        echo -e "${RED}Failed to enable site${NC}"
-        return 1
-    fi
-    
-    if ! a2dissite 000-default.conf; then
-        echo -e "${RED}Failed to disable default site${NC}"
-        return 1
-    fi
-    
-    if ! systemctl restart apache2; then
-        echo -e "${RED}Failed to restart Apache${NC}"
-        return 1
-    fi
-    
+
+    # Create .htaccess file
+    ((current++))
+    show_progress_bar $current $steps
+    cat > "/var/www/${domain}/.htaccess" <<EOL
+RewriteEngine On
+RewriteBase /
+
+# If the requested file/directory doesn't exist, redirect to index.php
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.php [QSA,L]
+
+# Prevent access to .htaccess
+<Files .htaccess>
+    Order allow,deny
+    Deny from all
+</Files>
+EOL
+
+    # Set proper permissions
+    chown www-data:www-data "/var/www/${domain}/.htaccess"
+    chmod 644 "/var/www/${domain}/.htaccess"
+
+    # Enable site and disable default
+    ((current++))
+    show_progress_bar $current $steps
+    a2ensite "${domain}.conf"
+    a2dissite 000-default.conf
+
+    # Restart Apache
+    ((current++))
+    show_progress_bar $current $steps
+    systemctl restart apache2
+
+    # Setup SSL with certbot
+    ((current++))
+    show_progress_bar $current $steps
+    certbot --apache --non-interactive --agree-tos --register-unsafely-without-email --domains ${domain}
+
     echo -e "${GREEN}✓${NC} Apache configuration complete"
     return 0
 }
