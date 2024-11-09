@@ -243,6 +243,7 @@ print_final_instructions() {
 # Main execution flow
 show_welcome_message
 check_version
+verify_script
 check_root
 check_os
 get_domain
