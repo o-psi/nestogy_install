@@ -14,7 +14,7 @@ NC='\033[0m' # No Color
 show_progress() {
     echo -e "\n${BLUE}[$1/9]${NC} ${GREEN}$2...${NC}"
 }
-
+ 
 # Version check with styled output
 check_version() {
     echo -e "\n${BLUE}[•]${NC} Checking for latest version..."
