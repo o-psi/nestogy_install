@@ -3,7 +3,7 @@ name: Update Script Checksum
 on:
   push:
     paths:
-      - 'itflow_install.sh'
+      - 'i.sh'
     branches:
       - main
   workflow_dispatch:  # Allows manual triggering
@@ -16,14 +16,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Calculate SHA256
         run: |
           sha256sum i.sh | awk '{print $1}' > i.sh.sha256
+
+      - name: Debug Info
+        run: |
+          ls -la
+          echo "Current SHA256:"
+          cat i.sh.sha256
 
       - name: Commit and push if changed
         run: |
           git config --local user.name "GitHub Action"
           git config --local user.email "action@github.com"
           git add i.sh.sha256
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Update SHA256 checksum" && git push) 
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update SHA256 checksum" && git push)
