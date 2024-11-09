@@ -12,7 +12,7 @@ This script automates the installation of ITFlow-NG (Nestogy) on Ubuntu 24.04 sy
 
 Download and run the installation script:
 ```bash
-curl -sSL https://raw.githubusercontent.com/o-psi/nestogy_install/main/i.sh -o i.sh && sudo bash i.sh
+curl -sSL https://raw.githubusercontent.com/o-psi/nestogy_install/refs/heads/main/i.sh -o i.sh && sudo bash i.sh
 ```
 
 ## What Does It Do?
