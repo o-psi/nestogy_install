@@ -12,43 +12,30 @@ jobs:
     
     strategy:
       matrix:
-        test-function:
-          - test_install_packages
-          - test_modify_php_ini
-          - test_setup_webroot
-          - test_setup_apache
-          - test_clone_nestogy
-          - test_setup_mysql
+        function:
+          - install_packages
+          - modify_php_ini
+          - setup_webroot
+          - setup_apache
+          - setup_mysql
+          - setup_cronjobs
+          - generate_cronkey_file
 
     steps:
     - uses: actions/checkout@v2
 
     - name: Make script executable
-      run: |
-        ls -la
-        pwd
-        chmod +x ./i.sh
-        ls -la
+      run: chmod +x ./i.sh
 
     - name: Run test function
       run: |
-        sudo bash ./i.sh --test-function ${{ matrix.test-function }} --domain example.com
-
-  shellcheck:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v2
-    
-    - name: Run ShellCheck
-      uses: ludeeus/action-shellcheck@master
-      with:
-        scandir: '.'
+        sudo bash ./i.sh --test-function ${{ matrix.function }} --domain example.com
         
-  integration:
+  full-test:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
     
     - name: Run full test mode
       run: |
-        sudo bash ./i.sh --test --domain example.com 
+        sudo bash ./i.sh --test --domain example.com

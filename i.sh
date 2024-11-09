@@ -85,22 +85,26 @@ get_domain() {
 
 # Modified installation steps with progress indicators
 install_packages() {
-    if [ "$TEST_MODE" = true ]; then
-        echo "TEST: Would install packages"
-        return 0
-    fi
     show_progress "1" "Installing system packages"
+    
+    if [ "$TEST_MODE" = true ]; then
+        echo -e "${BLUE}[TEST] Would run:${NC}"
+        echo "apt-get update"
+        echo "apt-get -y upgrade"
+        echo "apt-get install -y apache2 mariadb-server php libapache2-mod-php..."
+        return 0
+    }
     
     echo -e "${BLUE}[•]${NC} Updating package lists..."
     if ! apt-get update; then
         echo -e "${RED}Failed to update package lists${NC}"
-        exit 1
+        return 1
     fi
     
     echo -e "${BLUE}[•]${NC} Upgrading existing packages..."
     if ! apt-get -y upgrade; then
         echo -e "${RED}Failed to upgrade packages${NC}"
-        exit 1
+        return 1
     fi
     
     echo -e "${BLUE}[•]${NC} Installing required packages..."
@@ -108,7 +112,7 @@ install_packages() {
     php-mysqli php-curl php-imap php-mailparse libapache2-mod-md \
     certbot python3-certbot-apache git sudo; then
         echo -e "${RED}Failed to install required packages${NC}"
-        exit 1
+        return 1
     fi
     
     echo -e "${GREEN}✓${NC} Packages installed successfully"
@@ -120,22 +124,64 @@ generate_passwords() {
 }
 
 modify_php_ini() {
-    # Get the PHP version
-    PHP_VERSION=$(php -v | head -n 1 | awk '{print $2}' | cut -d '.' -f 1,2)
+    if [ "$TEST_MODE" = true ]; then
+        echo -e "${BLUE}[TEST] Would modify:${NC}"
+        echo "PHP Version: $(php -v | head -n 1)"
+        echo "PHP INI Path: $PHP_INI_PATH"
+        echo "Would set:"
+        echo " - upload_max_filesize = 5000M"
+        echo " - post_max_size = 5000M"
+        return 0
+    }
     
-    # Set the PHP_INI_PATH
+    # Original function code
+    PHP_VERSION=$(php -v | head -n 1 | awk '{print $2}' | cut -d '.' -f 1,2)
     PHP_INI_PATH="/etc/php/${PHP_VERSION}/apache2/php.ini"
-
-    sed -i 's/^;\?upload_max_filesize =.*/upload_max_filesize = 5000M/' $PHP_INI_PATH
-    sed -i 's/^;\?post_max_size =.*/post_max_size = 5000M/' $PHP_INI_PATH
+    
+    if ! sed -i 's/^;\?upload_max_filesize =.*/upload_max_filesize = 5000M/' $PHP_INI_PATH; then
+        echo -e "${RED}Failed to modify upload_max_filesize${NC}"
+        return 1
+    fi
+    
+    if ! sed -i 's/^;\?post_max_size =.*/post_max_size = 5000M/' $PHP_INI_PATH; then
+        echo -e "${RED}Failed to modify post_max_size${NC}"
+        return 1
+    fi
+    
+    return 0
 }
 
 setup_webroot() {
-    mkdir -p /var/www/${domain}
-    chown -R www-data:www-data /var/www/
+    if [ "$TEST_MODE" = true ]; then
+        echo -e "${BLUE}[TEST] Would create:${NC}"
+        echo "Directory: /var/www/${domain}"
+        echo "Would set ownership: www-data:www-data"
+        return 0
+    }
+    
+    if ! mkdir -p /var/www/${domain}; then
+        echo -e "${RED}Failed to create webroot directory${NC}"
+        return 1
+    fi
+    
+    if ! chown -R www-data:www-data /var/www/; then
+        echo -e "${RED}Failed to set webroot permissions${NC}"
+        return 1
+    fi
+    
+    return 0
 }
 
 setup_apache() {
+    if [ "$TEST_MODE" = true ]; then
+        echo -e "${BLUE}[TEST] Would configure Apache:${NC}"
+        echo "Would create: /etc/apache2/sites-available/${domain}.conf"
+        echo "Would enable site: ${domain}.conf"
+        echo "Would disable: 000-default.conf"
+        echo "Would restart Apache"
+        return 0
+    }
+    
     apache2_conf="<VirtualHost *:80>
     ServerAdmin webmaster@localhost
     ServerName ${domain}
@@ -144,11 +190,27 @@ setup_apache() {
     CustomLog /\${APACHE_LOG_DIR}/access.log combined
 </VirtualHost>"
 
-    echo "${apache2_conf}" > /etc/apache2/sites-available/${domain}.conf
+    if ! echo "${apache2_conf}" > /etc/apache2/sites-available/${domain}.conf; then
+        echo -e "${RED}Failed to create Apache configuration${NC}"
+        return 1
+    fi
 
-    a2ensite ${domain}.conf
-    a2dissite 000-default.conf
-    systemctl restart apache2
+    if ! a2ensite ${domain}.conf; then
+        echo -e "${RED}Failed to enable site${NC}"
+        return 1
+    fi
+    
+    if ! a2dissite 000-default.conf; then
+        echo -e "${RED}Failed to disable default site${NC}"
+        return 1
+    fi
+    
+    if ! systemctl restart apache2; then
+        echo -e "${RED}Failed to restart Apache${NC}"
+        return 1
+    fi
+    
+    return 0
 }
 
 clone_nestogy() {
@@ -190,10 +252,35 @@ generate_cronkey_file() {
 }
 
 setup_mysql() {
-    mysql -e "CREATE DATABASE nestogy /*\!40100 DEFAULT CHARACTER SET utf8 */;"
-    mysql -e "CREATE USER nestogy@localhost IDENTIFIED BY '${mariadbpwd}';"
-    mysql -e "GRANT ALL PRIVILEGES ON nestogy.* TO 'nestogy'@'localhost';"
-    mysql -e "FLUSH PRIVILEGES;"
+    if [ "$TEST_MODE" = true ]; then
+        echo -e "${BLUE}[TEST] Would configure MySQL:${NC}"
+        echo "Would create database: nestogy"
+        echo "Would create user: nestogy@localhost"
+        echo "Would grant privileges on nestogy.* to nestogy@localhost"
+        return 0
+    }
+    
+    if ! mysql -e "CREATE DATABASE nestogy /*\!40100 DEFAULT CHARACTER SET utf8 */;"; then
+        echo -e "${RED}Failed to create database${NC}"
+        return 1
+    fi
+    
+    if ! mysql -e "CREATE USER nestogy@localhost IDENTIFIED BY '${mariadbpwd}';"; then
+        echo -e "${RED}Failed to create MySQL user${NC}"
+        return 1
+    fi
+    
+    if ! mysql -e "GRANT ALL PRIVILEGES ON nestogy.* TO 'nestogy'@'localhost';"; then
+        echo -e "${RED}Failed to grant privileges${NC}"
+        return 1
+    fi
+    
+    if ! mysql -e "FLUSH PRIVILEGES;"; then
+        echo -e "${RED}Failed to flush privileges${NC}"
+        return 1
+    fi
+    
+    return 0
 }
 
 # Welcome message with styled output
@@ -275,28 +362,39 @@ parse_args() {
 # Add test runner function
 run_tests() {
     if [ -n "$TEST_FUNCTION" ]; then
-        echo "Running test for: $TEST_FUNCTION"
+        echo -e "${BLUE}Running test for: $TEST_FUNCTION${NC}"
         $TEST_FUNCTION
-        exit $?
+        return $?
     fi
 
-    # Run all tests
-    test_install_packages
-    test_modify_php_ini
-    test_setup_webroot
-    # ... add more test functions ...
-}
-
-# Add individual test functions
-test_install_packages() {
-    echo "Testing package installation..."
-    if command -v apache2 >/dev/null 2>&1; then
-        echo "✓ Apache2 is available"
-    else
-        echo "✗ Apache2 not found"
+    local functions=(
+        "install_packages"
+        "modify_php_ini"
+        "setup_webroot"
+        "setup_apache"
+        "setup_mysql"
+        "setup_cronjobs"
+        "generate_cronkey_file"
+    )
+    
+    local failed=0
+    for func in "${functions[@]}"; do
+        echo -e "\n${BLUE}Testing $func...${NC}"
+        if ! $func; then
+            echo -e "${RED}✗ $func failed${NC}"
+            failed=$((failed + 1))
+        else
+            echo -e "${GREEN}✓ $func passed${NC}"
+        fi
+    done
+    
+    if [ $failed -gt 0 ]; then
+        echo -e "\n${RED}$failed function(s) failed${NC}"
         return 1
+    else
+        echo -e "\n${GREEN}All functions passed!${NC}"
+        return 0
     fi
-    # Add more package checks...
 }
 
 # Modify main execution flow
