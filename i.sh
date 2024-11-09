@@ -18,7 +18,7 @@ show_progress() {
 # Version check with styled output
 check_version() {
     echo -e "\n${BLUE}[•]${NC} Checking for latest version..."
-    LATEST_VERSION=$(curl -sSL https://raw.githubusercontent.com/twetech/itflow-install-script/refs/heads/main/version.txt)
+    LATEST_VERSION=$(curl -sSL https://raw.githubusercontent.com/o-psi/nestogy_install/refs/heads/main/version.txt)
     if [[ "$LATEST_VERSION" == "404: Not Found" ]]; then
         echo -e "${GREEN}✓${NC} Version check skipped - using local version: $VERSION"
         return 0
@@ -35,7 +35,7 @@ check_version() {
 # Script verification with styled output
 verify_script() {
     echo -e "\n${BLUE}[•]${NC} Verifying script integrity..."
-    SCRIPT_HASH=$(curl -sSL https://raw.githubusercontent.com/twetech/itflow-install-script/refs/heads/main/itflow_install.sh.sha256)
+    SCRIPT_HASH=$(curl -sSL https://raw.githubusercontent.com/o-psi/nestogy_install/refs/heads/main/i.sh.sha256)
     if ! echo "$SCRIPT_HASH *-" | sha256sum -c - >/dev/null 2>&1; then
         echo -e "${RED}╔════════════════════════════════════════╗${NC}"
         echo -e "${RED}║        Verification Failed!            ║${NC}"
