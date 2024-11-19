@@ -528,7 +528,7 @@ setup_ssl() {
     # Check if certbot is installed
     if ! command -v certbot >/dev/null 2>&1; then
         handle_error "Certbot not installed"
-    }
+    fi
     
     log "INFO" "Obtaining SSL certificate..."
     
