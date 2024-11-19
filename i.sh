@@ -154,72 +154,99 @@ restore_terminal() {
     tput cnorm 2>/dev/null || true
 }
 
+# Add helper function for centering calculations
+get_center_position() {
+    local width=$1
+    local height=$2
+    local box_width=$3
+    local box_height=$4
+    
+    local center_x=$(( (width - box_width) / 2 ))
+    local center_y=$(( (height - box_height) / 2 ))
+    
+    echo "$center_x $center_y"
+}
+
 # UI Components
 draw_header_box() {
     [ "$TERM_UI" = false ] && return 0
     
     local title="ITFlow-NG Installation"
-    local box_width=$((TERM_WIDTH - 4))
-    local padding=$(( (box_width - ${#title}) / 2 ))
+    local box_width=60  # Fixed width for header
+    local box_height=3
+    
+    # Calculate center position
+    read -r start_x start_y < <(get_center_position "$TERM_WIDTH" 6 "$box_width" "$box_height")
     
     # Guard against failed tput commands
-    tput cup 1 2 2>/dev/null || return 0
+    tput cup "$start_y" "$start_x" 2>/dev/null || return 0
     
-    # Use printf with error handling
-    printf "${BOX_CHARS[0]}" 2>/dev/null || return 0
-    printf "%${box_width}s" "" 2>/dev/null | tr ' ' "${BOX_CHARS[1]}" || return 0
-    printf "${BOX_CHARS[2]}\n" 2>/dev/null || return 0
+    # Draw top border
+    printf "${BOX_CHARS[0]}"
+    printf "%$(($box_width-2))s" "" | tr ' ' "${BOX_CHARS[1]}"
+    printf "${BOX_CHARS[2]}\n"
     
-    tput cup 2 2
+    # Draw title
+    local padding=$(( (box_width - ${#title} - 2) / 2 ))
+    tput cup "$((start_y+1))" "$start_x"
     printf "${BOX_CHARS[3]}"
     printf "%${padding}s%s%${padding}s" "" "$title" ""
     printf "${BOX_CHARS[3]}\n"
     
-    tput cup 3 2
-    printf "${BOX_CHARS[3]}"
-    printf "%${box_width}s" "" | tr ' ' ' '
-    printf "${BOX_CHARS[3]}\n"
-    
-    tput cup 4 2
+    # Draw bottom border
+    tput cup "$((start_y+2))" "$start_x"
     printf "${BOX_CHARS[6]}"
-    printf "%${box_width}s" "" | tr ' ' "${BOX_CHARS[1]}"
-    printf "${BOX_CHARS[8]}\n"
+    printf "%$(($box_width-2))s" "" | tr ' ' "${BOX_CHARS[1]}"
+    printf "${BOX_CHARS[8]}"
 }
 
 clear_content_area() {
-    disable_term_ui && return 0
+    [ "$TERM_UI" = false ] && return 0
     
-    local start_line=$CONTENT_START
-    local lines=10
+    local box_width=70
+    local box_height=6
     
-    for ((i=0; i<lines; i++)); do
-        tput cup $((start_line + i)) 2
-        printf "%${CONTENT_WIDTH}s" ""
+    # Calculate center position
+    read -r start_x start_y < <(get_center_position "$TERM_WIDTH" "$TERM_HEIGHT" "$box_width" "$box_height")
+    
+    for ((i=0; i<box_height; i++)); do
+        tput cup "$((start_y+i))" "$start_x"
+        printf "%${box_width}s" ""
     done
 }
 
 draw_content_box() {
-    disable_term_ui && return 0
+    [ "$TERM_UI" = false ] && return 0
     
     local title="$1"
+    local box_width=70  # Fixed width for content boxes
+    local box_height=6  # Fixed height for content boxes
+    
+    # Calculate center position
+    read -r start_x start_y < <(get_center_position "$TERM_WIDTH" "$TERM_HEIGHT" "$box_width" "$box_height")
+    
     clear_content_area
     
-    tput cup $CONTENT_START 2
+    # Draw top border with title
+    tput cup "$start_y" "$start_x"
     printf "${BOX_CHARS[0]}══[ %s ]" "$title"
-    printf "%$(($CONTENT_WIDTH - ${#title} - 6))s" "" | tr ' ' "${BOX_CHARS[1]}"
+    printf "%$(($box_width - ${#title} - 6))s" "" | tr ' ' "${BOX_CHARS[1]}"
     printf "${BOX_CHARS[2]}"
     
-    for ((i=1; i<=3; i++)); do
-        tput cup $(($CONTENT_START + i)) 2
-        printf "${BOX_CHARS[3]}%${CONTENT_WIDTH}s${BOX_CHARS[3]}" ""
+    # Draw sides and content area
+    for ((i=1; i<box_height-1; i++)); do
+        tput cup "$((start_y+i))" "$start_x"
+        printf "${BOX_CHARS[3]}%$(($box_width-2))s${BOX_CHARS[3]}" ""
     done
     
-    tput cup $(($CONTENT_START + 4)) 2
+    # Draw bottom border
+    tput cup "$((start_y+box_height-1))" "$start_x"
     printf "${BOX_CHARS[6]}"
-    printf "%${CONTENT_WIDTH}s" "" | tr ' ' "${BOX_CHARS[1]}"
+    printf "%$(($box_width-2))s" "" | tr ' ' "${BOX_CHARS[1]}"
     printf "${BOX_CHARS[8]}"
     
-    tput cup $(($CONTENT_START + 2)) 4
+    # Set cursor position for content
+    tput cup "$((start_y+2))" "$((start_x+2))"
 }
 
 show_progress() {
@@ -233,13 +260,19 @@ show_progress() {
     local spinner=( "⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏" )
     local percentage=$((CURRENT_STEP * 100 / TOTAL_STEPS))
     
-    # Try to draw the content box, fall back to simple output if it fails
+    # Draw the content box
     draw_content_box "Progress" || {
         echo "$message... ($percentage%)"
         return 0
     }
     
-    tput cup $(($CONTENT_START + 1)) 4
+    # Calculate center position for progress box
+    local box_width=70
+    local box_height=6
+    read -r start_x start_y < <(get_center_position "$TERM_WIDTH" "$TERM_HEIGHT" "$box_width" "$box_height")
+    
+    # Show progress info
+    tput cup "$((start_y+2))" "$((start_x+2))"
     printf "${BLUE}[%2d/%2d]${NC} " "$CURRENT_STEP" "$TOTAL_STEPS"
     printf "${GREEN}${spinner[CURRENT_STEP % 10]}${NC} "
     printf "${message}... "
