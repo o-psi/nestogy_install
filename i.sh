@@ -350,20 +350,52 @@ setup_apache() {
         handle_error "Apache2 not installed"
     fi
     
-    # Enable modules
-    local modules=(rewrite ssl headers md)
+    # Enable required modules
+    local modules=(rewrite ssl headers)
     for mod in "${modules[@]}"; do
         log "INFO" "Enabling Apache module: $mod"
         a2enmod "$mod" || handle_error "Failed to enable Apache module: $mod"
     done
     
-    # Create and verify sites-available directory
-    local sites_dir="/etc/apache2/sites-available"
-    if [ ! -d "$sites_dir" ]; then
-        handle_error "Apache sites directory not found: $sites_dir"
+    # Create Apache configuration
+    local config_file="/etc/apache2/sites-available/${domain}.conf"
+    cat > "$config_file" << EOF || handle_error "Failed to create Apache config"
+<VirtualHost *:80>
+    ServerName ${domain}
+    ServerAlias www.${domain}
+    DocumentRoot /var/www/${domain}/public
+    
+    <Directory /var/www/${domain}/public>
+        Options -Indexes +FollowSymLinks
+        AllowOverride All
+        Require all granted
+    </Directory>
+    
+    ErrorLog \${APACHE_LOG_DIR}/${domain}_error.log
+    CustomLog \${APACHE_LOG_DIR}/${domain}_access.log combined
+</VirtualHost>
+EOF
+    
+    # Create public directory if it doesn't exist
+    mkdir -p "/var/www/${domain}/public" || handle_error "Failed to create public directory"
+    
+    # Move index.php to public directory
+    if [ -f "/var/www/${domain}/index.php" ]; then
+        mv "/var/www/${domain}/index.php" "/var/www/${domain}/public/" || handle_error "Failed to move index.php"
     fi
     
-    # Rest of setup_apache() function...
+    # Enable the new site and disable the default
+    a2ensite "${domain}.conf" || handle_error "Failed to enable site"
+    a2dissite 000-default.conf || handle_error "Failed to disable default site"
+    
+    # Test Apache configuration
+    apache2ctl configtest || handle_error "Apache configuration test failed"
+    
+    # Restart Apache
+    systemctl restart apache2 || handle_error "Failed to restart Apache"
+    
+    log "INFO" "Apache configured successfully"
+    return 0
 }
 
 # Update setup_mysql()
@@ -490,6 +522,28 @@ generate_cronkey_file() {
     echo -e "${GREEN}✓${NC} Cron key generated"
 }
 
+setup_ssl() {
+    show_progress "$((++CURRENT_STEP))" "Setting up SSL"
+    
+    # Check if certbot is installed
+    if ! command -v certbot >/dev/null 2>&1; then
+        handle_error "Certbot not installed"
+    }
+    
+    log "INFO" "Obtaining SSL certificate..."
+    
+    # Get SSL certificate
+    certbot --apache \
+        --non-interactive \
+        --agree-tos \
+        --email "admin@${domain}" \
+        --domains "${domain},www.${domain}" \
+        --redirect || handle_error "Failed to obtain SSL certificate"
+    
+    log "INFO" "SSL certificate obtained successfully"
+    return 0
+}
+
 print_final_instructions() {
     echo -e "\n📋 Next Steps:"
     echo -e "\n1. Set up SSL Certificate:"
@@ -582,6 +636,7 @@ main() {
     modify_php_ini
     setup_webroot
     setup_apache
+    setup_ssl
     setup_mysql
     clone_nestogy
     setup_cronjobs
