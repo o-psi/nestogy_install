@@ -3,21 +3,16 @@
 # Version
 VERSION="1.0.0"
 
-# Terminal type handling
-if [ -z "$TERM" ]; then
-    export TERM=xterm-256color
-fi
+# Log file
+LOG_FILE="/var/log/itflow_install.log"
 
-# Set UTF-8 encoding
-export LANG=en_US.UTF-8
-export LC_ALL=en_US.UTF-8
-
-# Set a consistent UTF-8 locale
-export LC_ALL=C.UTF-8
-export LANG=C.UTF-8
-
-# Update the background character
-BACKGROUND_CHAR='.'  # Using a simple dot instead of ░
+# Add logging function
+log() {
+    local level="$1"
+    local message="$2"
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    echo "[${timestamp}] [${level}] ${message}" | tee -a "$LOG_FILE"
+}
 
 # Test mode function
 run_tests() {
@@ -76,15 +71,6 @@ BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-# Box drawing characters
-BOX_CHARS=(
-    "+" "-" "+"  # Top corners and horizontal
-    "|" " " "|"  # Vertical and space
-    "+" "-" "+"  # Bottom corners and horizontal
-    "+" "+"      # Side connectors
-    "=" "|"      # Double lines
-)
-
 # Global variables
 TERM_WIDTH=$(tput cols)
 TERM_HEIGHT=$(tput lines)
@@ -93,186 +79,11 @@ CONTENT_WIDTH=$((TERM_WIDTH - 8))
 TOTAL_STEPS=12
 CURRENT_STEP=0
 
-# Add this helper function at the top
-disable_term_ui() {
-    [ "$TEST_MODE" = true ] && return 0
-    return 1
-}
-
-# Terminal setup and restoration
-setup_terminal() {
-    disable_term_ui && return 0
-    
-    # Check if we're in a terminal
-    if [ ! -t 1 ]; then
-        TERM_UI=false
-        return 0
-    fi
-    
-    # Check if required commands exist
-    if ! command -v tput >/dev/null 2>&1; then
-        TERM_UI=false
-        return 0
-    fi
-    
-    # Try to get terminal size, fallback to defaults if it fails
-    TERM_WIDTH=$(tput cols 2>/dev/null || echo 80)
-    TERM_HEIGHT=$(tput lines 2>/dev/null || echo 24)
-    
-    # Validate terminal size
-    if [ "$TERM_WIDTH" -lt 80 ] || [ "$TERM_HEIGHT" -lt 24 ]; then
-        echo "Terminal too small. Minimum size: 80x24"
-        echo "Current size: ${TERM_WIDTH}x${TERM_HEIGHT}"
-        TERM_UI=false
-        return 0
-    fi
-    
-    # Save current screen
-    tput smcup 2>/dev/null || true
-    clear 2>/dev/null || true
-    
-    # Draw background (only if previous commands succeeded)
-    if [ $? -eq 0 ]; then
-        # Draw background with simple characters
-        for ((i=1; i<=TERM_HEIGHT; i++)); do
-            tput cup $i 0 2>/dev/null || continue
-            printf '%*s' "$TERM_WIDTH" '' | tr ' ' "$BACKGROUND_CHAR"
-        done
-        draw_header_box
-    else
-        TERM_UI=false
-    fi
-}
-
-restore_terminal() {
-    [ "$TERM_UI" = false ] && return 0
-    
-    # Restore screen
-    tput rmcup 2>/dev/null || true
-    
-    # Reset cursor
-    tput cnorm 2>/dev/null || true
-}
-
-# UI Components
-draw_header_box() {
-    [ "$TERM_UI" = false ] && return 0
-    
-    local title="ITFlow-NG Installation"
-    local box_width=$((TERM_WIDTH - 4))
-    local padding=$(( (box_width - ${#title}) / 2 ))
-    
-    # Guard against failed tput commands
-    tput cup 1 2 2>/dev/null || return 0
-    
-    # Use printf with error handling
-    printf "${BOX_CHARS[0]}" 2>/dev/null || return 0
-    printf "%${box_width}s" "" 2>/dev/null | tr ' ' "${BOX_CHARS[1]}" || return 0
-    printf "${BOX_CHARS[2]}\n" 2>/dev/null || return 0
-    
-    tput cup 2 2
-    printf "${BOX_CHARS[3]}"
-    printf "%${padding}s%s%${padding}s" "" "$title" ""
-    printf "${BOX_CHARS[3]}\n"
-    
-    tput cup 3 2
-    printf "${BOX_CHARS[3]}"
-    printf "%${box_width}s" "" | tr ' ' ' '
-    printf "${BOX_CHARS[3]}\n"
-    
-    tput cup 4 2
-    printf "${BOX_CHARS[6]}"
-    printf "%${box_width}s" "" | tr ' ' "${BOX_CHARS[1]}"
-    printf "${BOX_CHARS[8]}\n"
-}
-
-clear_content_area() {
-    disable_term_ui && return 0
-    
-    local start_line=$CONTENT_START
-    local lines=10
-    
-    for ((i=0; i<lines; i++)); do
-        tput cup $((start_line + i)) 2
-        printf "%${CONTENT_WIDTH}s" ""
-    done
-}
-
-draw_content_box() {
-    disable_term_ui && return 0
-    
-    local title="$1"
-    clear_content_area
-    
-    tput cup $CONTENT_START 2
-    printf "${BOX_CHARS[0]}══[ %s ]" "$title"
-    printf "%$(($CONTENT_WIDTH - ${#title} - 6))s" "" | tr ' ' "${BOX_CHARS[1]}"
-    printf "${BOX_CHARS[2]}"
-    
-    for ((i=1; i<=3; i++)); do
-        tput cup $(($CONTENT_START + i)) 2
-        printf "${BOX_CHARS[3]}%${CONTENT_WIDTH}s${BOX_CHARS[3]}" ""
-    done
-    
-    tput cup $(($CONTENT_START + 4)) 2
-    printf "${BOX_CHARS[6]}"
-    printf "%${CONTENT_WIDTH}s" "" | tr ' ' "${BOX_CHARS[1]}"
-    printf "${BOX_CHARS[8]}"
-    
-    tput cup $(($CONTENT_START + 2)) 4
-}
-
+# Update show_progress to simple output
 show_progress() {
-    [ "$TERM_UI" = false ] && {
-        echo "$2..."
-        return 0
-    }
-    
-    CURRENT_STEP=$1
-    local message=$2
-    local spinner=( "⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏" )
-    local percentage=$((CURRENT_STEP * 100 / TOTAL_STEPS))
-    
-    # Try to draw the content box, fall back to simple output if it fails
-    draw_content_box "Progress" || {
-        echo "$message... ($percentage%)"
-        return 0
-    }
-    
-    tput cup $(($CONTENT_START + 1)) 4
-    printf "${BLUE}[%2d/%2d]${NC} " "$CURRENT_STEP" "$TOTAL_STEPS"
-    printf "${GREEN}${spinner[CURRENT_STEP % 10]}${NC} "
-    printf "${message}... "
-    printf "${YELLOW}(%3d%%)${NC}" "$percentage"
-}
-
-show_progress_bar() {
-    disable_term_ui && return 0
-    
-    local current=$1
-    local total=$2
-    local width=50
-    local percentage=$((current * 100 / total))
-    local completed=$((width * current / total))
-    local remaining=$((width - completed))
-    local elapsed=$SECONDS
-    
-    local eta="--:--"
-    if [ "$current" -gt 0 ]; then
-        local rate=$(bc <<< "scale=2; $elapsed / $current")
-        local remaining_time=$(bc <<< "scale=0; ($total - $current) * $rate")
-        eta=$(date -u -d "@$remaining_time" +"%M:%S")
-    fi
-    
-    tput cup $(($CONTENT_START + 2)) 4
-    printf "["
-    printf "%${completed}s" | tr ' ' '█'
-    if [ "$completed" -lt "$width" ]; then
-        printf "▓"
-        printf "%$((remaining-1))s" | tr ' ' '░'
-    fi
-    printf "] %3d%% " "$percentage"
-    printf "${BLUE}ETA: %s${NC}" "$eta"
+    local step="$1"
+    local message="$2"
+    log "INFO" "Step ${step}/${TOTAL_STEPS}: ${message}"
 }
 
 # Installation Functions
@@ -295,7 +106,6 @@ check_version() {
     
     LATEST_VERSION=$(curl -sSL https://raw.githubusercontent.com/o-psi/nestogy_install/refs/heads/main/version.txt)
     if [[ "$VERSION" != "$LATEST_VERSION" ]]; then
-        draw_content_box "Version Error"
         echo -e "${RED}A newer version ($LATEST_VERSION) is available"
         echo -e "Please update to the latest version${NC}"
         return 1
@@ -309,57 +119,42 @@ verify_script() {
     URL="https://raw.githubusercontent.com/o-psi/nestogy_install/refs/heads/main/i.sh.sha256"
     
     if [ "$TEST_MODE" = true ]; then
-        echo "Testing script verification..."
+        log "INFO" "Testing script verification..."
         
-        # Check for required tools
         if ! command -v sha256sum >/dev/null 2>&1; then
-            echo "Error: Required tool 'sha256sum' not found"
+            log "ERROR" "Required tool 'sha256sum' not found"
             return 1
         fi
-        echo "✓ sha256sum available"
+        log "INFO" "sha256sum available"
         
-        # Test hash file access
         if ! curl -s -f "$URL" >/dev/null; then
-            echo "Error: Cannot access hash file"
+            log "ERROR" "Cannot access hash file"
             return 1
-        fi
-        echo "✓ Hash file accessible"
+        }
+        log "INFO" "Hash file accessible"
         
-        echo "✓ Script verification test complete"
+        log "INFO" "Script verification test complete"
         return 0
     fi
     
     show_progress "$((++CURRENT_STEP))" "Verifying script"
     
-    # Download hash and verify script
     remote_hash=$(curl -sSL "$URL")
     if [ -z "$remote_hash" ]; then
-        draw_content_box "Verification Error"
-        tput cup $((start_y+2)) $((start_x+2))
-        echo -e "${RED}Failed to download verification hash${NC}"
-        tput cup $((start_y+3)) $((start_x+2))
-        read -n 1 -p "Press any key to exit..."
+        log "ERROR" "Failed to download verification hash"
         exit 1
     fi
     
-    # Calculate local hash
     local_hash=$(sha256sum "$0" | cut -d' ' -f1)
     
-    # Compare hashes
     if [ "$remote_hash" != "$local_hash" ]; then
-        draw_content_box "Verification Error"
-        tput cup $((start_y+2)) $((start_x+2))
-        echo -e "${RED}Script verification failed${NC}"
-        tput cup $((start_y+3)) $((start_x+2))
-        echo -e "Expected: $remote_hash"
-        tput cup $((start_y+4)) $((start_x+2))
-        echo -e "Got:      $local_hash"
-        tput cup $((start_y+5)) $((start_x+2))
-        read -n 1 -p "Press any key to exit..."
+        log "ERROR" "Script verification failed"
+        log "ERROR" "Expected hash: $remote_hash"
+        log "ERROR" "Got hash:      $local_hash"
         exit 1
     fi
     
-    echo -e "${GREEN}✓${NC} Script verified"
+    log "INFO" "Script verified successfully"
     return 0
 }
 
@@ -367,7 +162,6 @@ check_root() {
     show_progress "$((++CURRENT_STEP))" "Checking permissions"
     
     if [[ $EUID -ne 0 ]]; then
-        draw_content_box "Permission Error"
         echo -e "${RED}Root privileges required"
         echo -e "Please run with sudo or as root${NC}"
         read -n 1 -p "Press any key to exit..."
@@ -394,7 +188,6 @@ check_os() {
     show_progress "$((++CURRENT_STEP))" "Checking system compatibility"
     
     if ! grep -E "24.04" "/etc/"*"release" &>/dev/null; then
-        draw_content_box "System Error"
         echo -e "${RED}Unsupported OS detected"
         echo -e "Ubuntu 24.04 is required${NC}"
         return 1
@@ -408,7 +201,6 @@ get_domain() {
     show_progress "$((++CURRENT_STEP))" "Configuring domain"
     
     while [[ $domain != *[.]* ]]; do
-        draw_content_box "Domain Setup"
         echo -e "${YELLOW}Please enter your domain (e.g., domain.com):${NC}"
         echo -ne "→ "
         read domain
@@ -612,7 +404,6 @@ modify_php_ini() {
     
     for setting in "${settings[@]}"; do
         ((current++))
-        show_progress_bar $current $total
         local key=$(echo $setting | cut -d= -f1)
         if ! sed -i "s/^;\?${key} =.*/${setting}/" $PHP_INI_PATH; then
             echo -e "${RED}Failed to modify ${key}${NC}"
@@ -673,7 +464,6 @@ setup_apache() {
     
     # Enable required modules
     ((current++))
-    show_progress_bar $current $steps
     a2enmod rewrite
     a2enmod ssl
     a2enmod headers
@@ -681,7 +471,6 @@ setup_apache() {
     
     # Create Apache configuration
     ((current++))
-    show_progress_bar $current $steps
     cat > "/etc/apache2/sites-available/${domain}.conf" <<EOL
 <VirtualHost *:80>
     ServerAdmin webmaster@localhost
@@ -707,7 +496,6 @@ EOL
 
     # Create .htaccess file
     ((current++))
-    show_progress_bar $current $steps
     cat > "/var/www/${domain}/.htaccess" <<EOL
 RewriteEngine On
 RewriteBase /
@@ -730,18 +518,15 @@ EOL
 
     # Enable site and disable default
     ((current++))
-    show_progress_bar $current $steps
     a2ensite "${domain}.conf"
     a2dissite 000-default.conf
 
     # Restart Apache
     ((current++))
-    show_progress_bar $current $steps
     systemctl restart apache2
 
     # Setup SSL with certbot
     ((current++))
-    show_progress_bar $current $steps
     certbot --apache --non-interactive --agree-tos --register-unsafely-without-email --domains ${domain}
 
     echo -e "${GREEN}✓${NC} Apache configuration complete"
@@ -796,7 +581,6 @@ clone_nestogy() {
     
     # Clone repository
     ((current++))
-    show_progress_bar $current $steps
     if ! git clone https://github.com/twetech/itflow-ng.git "/var/www/${domain}" >/dev/null 2>&1; then
         echo -e "${RED}Failed to clone repository${NC}"
         return 1
@@ -804,7 +588,6 @@ clone_nestogy() {
     
     # Set permissions
     ((current++))
-    show_progress_bar $current $steps
     if ! chown -R www-data:www-data "/var/www/${domain}"; then
         echo -e "${RED}Failed to set permissions${NC}"
         return 1
@@ -812,7 +595,6 @@ clone_nestogy() {
     
     # Configure environment
     ((current++))
-    show_progress_bar $current $steps
     if ! cp "/var/www/${domain}/.env.example" "/var/www/${domain}/.env"; then
         echo -e "${RED}Failed to create environment file${NC}"
         return 1
@@ -834,7 +616,6 @@ setup_cronjobs() {
     
     # Create cron job
     ((current++))
-    show_progress_bar $current $steps
     local cron_line="*/5 * * * * curl -s https://${domain}/cron.php?key=${cronkey} >/dev/null 2>&1"
     if ! (crontab -l 2>/dev/null | grep -Fq "$cron_line" || echo "$cron_line" | crontab -); then
         echo -e "${RED}Failed to create cron job${NC}"
@@ -843,7 +624,6 @@ setup_cronjobs() {
     
     # Verify cron job
     ((current++))
-    show_progress_bar $current $steps
     if ! crontab -l | grep -Fq "$cron_line"; then
         echo -e "${RED}Failed to verify cron job${NC}"
         return 1
@@ -865,7 +645,6 @@ generate_cronkey_file() {
     
     # Create key file
     ((current++))
-    show_progress_bar $current $steps
     if ! echo "<?php define('CRON_KEY', '${cronkey}');" > "/var/www/${domain}/includes/cronkey.php"; then
         echo -e "${RED}Failed to create cron key file${NC}"
         return 1
@@ -873,7 +652,6 @@ generate_cronkey_file() {
     
     # Set permissions
     ((current++))
-    show_progress_bar $current $steps
     if ! chmod 640 "/var/www/${domain}/includes/cronkey.php"; then
         echo -e "${RED}Failed to set cron key file permissions${NC}"
         return 1
@@ -883,8 +661,6 @@ generate_cronkey_file() {
 }
 
 print_final_instructions() {
-    draw_content_box "Installation Complete! 🎉"
-    
     echo -e "\n📋 Next Steps:"
     echo -e "\n1. Set up SSL Certificate:"
     echo -e "   Run this command to get your DNS challenge:"
@@ -892,11 +668,6 @@ print_final_instructions() {
     
     echo -e "\n2. Complete Setup:"
     echo -e "   Visit: ${GREEN}https://${domain}${NC}"
-    
-    draw_content_box "Credentials"
-    echo -e "Database User:     ${GREEN}nestogy${NC}"
-    echo -e "Database Name:     ${GREEN}nestogy${NC}"
-    echo -e "Database Password: ${GREEN}${mariadbpwd}${NC}"
     
     echo -e "\n⚠️  Important: Save these credentials in a secure location!"
     echo -e "\nFor support, visit: https://github.com/twetech/itflow-ng/issues"
@@ -947,44 +718,28 @@ run_test_function() {
     fi
 }
 
-# Add a new function to handle graceful fallback
-handle_no_tui() {
-    TERM_UI=false
-    echo "Running in basic mode (no TUI)"
-    echo "--------------------------------"
-}
-
 # Main execution
 main() {
+    # Create log file
+    touch "$LOG_FILE" 2>/dev/null || {
+        echo "ERROR: Cannot create log file. Please run as root."
+        exit 1
+    }
+    
+    log "INFO" "Starting ITFlow-NG installation"
+    log "INFO" "Version: ${VERSION}"
+    
     parse_args "$@"
     
     if [ -n "$TEST_FUNCTION" ]; then
+        log "INFO" "Running test function: ${TEST_FUNCTION}"
         run_test_function "$TEST_FUNCTION"
         exit $?
     elif [ "$TEST_MODE" = true ]; then
+        log "INFO" "Running in test mode"
         run_tests
         exit $?
     fi
-    
-    # Try to setup terminal, fall back to basic mode if it fails
-    if ! setup_terminal; then
-        handle_no_tui
-    fi
-    
-    trap restore_terminal EXIT INT TERM
-    
-    # Welcome message
-    draw_content_box "Welcome"
-    echo "Welcome to ITFlow-NG Installation"
-    echo "Version: ${VERSION}"
-    echo -e "\nThis script will:"
-    echo " • Install required system packages"
-    echo " • Configure Apache and PHP"
-    echo " • Set up MariaDB database"
-    echo " • Configure SSL certificates"
-    echo " • Set up automated tasks"
-    echo -e "\nPress any key to begin..."
-    read -n 1
     
     # Run installation steps
     check_version
@@ -1002,15 +757,36 @@ main() {
     setup_cronjobs
     generate_cronkey_file
     
-    # Show final instructions
-    print_final_instructions
+    log "INFO" "Installation completed successfully"
     
-    # Restore terminal
-    restore_terminal
+    # Show final instructions
+    cat << EOF
+
+Installation Complete! 🎉
+
+Next Steps:
+1. Set up SSL Certificate:
+   Run this command to get your DNS challenge:
+   sudo certbot certonly --manual --preferred-challenges dns --agree-tos --domains *.${domain}
+
+2. Complete Setup:
+   Visit: https://${domain}
+
+Credentials:
+Database User:     nestogy
+Database Name:     nestogy
+Database Password: ${mariadbpwd}
+
+⚠️  Important: Save these credentials in a secure location!
+
+For support, visit: https://github.com/twetech/itflow-ng/issues
+Installation log available at: ${LOG_FILE}
+EOF
 }
 
-# Add trap for clean exit
-trap 'restore_terminal' EXIT INT TERM
+# Remove all trap handlers for terminal restoration
+# Just keep basic error handling
+trap 'log "ERROR" "Installation failed with error on line $LINENO"' ERR
 
 # Start installation
 main "$@"
