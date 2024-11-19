@@ -96,36 +96,71 @@ disable_term_ui() {
 setup_terminal() {
     disable_term_ui && return 0
     
-    tput smcup
-    clear
+    # Check if we're in a terminal
+    if [ ! -t 1 ]; then
+        TERM_UI=false
+        return 0
+    fi
     
-    # Draw background
-    for ((i=1; i<=TERM_HEIGHT; i++)); do
-        tput cup $i 0
-        printf "%${TERM_WIDTH}s" "" | tr ' ' '░'
-    done
+    # Check if required commands exist
+    if ! command -v tput >/dev/null 2>&1; then
+        TERM_UI=false
+        return 0
+    fi
     
-    draw_header_box
+    # Try to get terminal size, fallback to defaults if it fails
+    TERM_WIDTH=$(tput cols 2>/dev/null || echo 80)
+    TERM_HEIGHT=$(tput lines 2>/dev/null || echo 24)
+    
+    # Validate terminal size
+    if [ "$TERM_WIDTH" -lt 80 ] || [ "$TERM_HEIGHT" -lt 24 ]; then
+        echo "Terminal too small. Minimum size: 80x24"
+        echo "Current size: ${TERM_WIDTH}x${TERM_HEIGHT}"
+        TERM_UI=false
+        return 0
+    fi
+    
+    # Save current screen
+    tput smcup 2>/dev/null || true
+    clear 2>/dev/null || true
+    
+    # Draw background (only if previous commands succeeded)
+    if [ $? -eq 0 ]; then
+        for ((i=1; i<=TERM_HEIGHT; i++)); do
+            tput cup $i 0 2>/dev/null || continue
+            printf "%${TERM_WIDTH}s" "" | tr ' ' '░'
+        done
+        draw_header_box
+    else
+        TERM_UI=false
+    fi
 }
 
 restore_terminal() {
-    disable_term_ui && return 0
+    [ "$TERM_UI" = false ] && return 0
     
-    tput rmcup
+    # Restore screen
+    tput rmcup 2>/dev/null || true
+    
+    # Reset cursor
+    tput cnorm 2>/dev/null || true
 }
 
 # UI Components
 draw_header_box() {
-    disable_term_ui && return 0
+    [ "$TERM_UI" = false ] && return 0
     
     local title="ITFlow-NG Installation"
     local box_width=$((TERM_WIDTH - 4))
     local padding=$(( (box_width - ${#title}) / 2 ))
     
-    tput cup 1 2
-    printf "${BOX_CHARS[0]}"
-    printf "%${box_width}s" "" | tr ' ' "${BOX_CHARS[1]}"
-    printf "${BOX_CHARS[2]}\n"
+    # Guard against failed tput commands
+    tput cup 1 2 2>/dev/null || return 0
+    
+    # Use printf with error handling
+    printf "${BOX_CHARS[0]}" 2>/dev/null || return 0
+    printf "%${box_width}s" "" 2>/dev/null | tr ' ' "${BOX_CHARS[1]}" || return 0
+    printf "${BOX_CHARS[2]}\n" 2>/dev/null || return 0
     
     tput cup 2 2
     printf "${BOX_CHARS[3]}"
@@ -180,14 +215,22 @@ draw_content_box() {
 }
 
 show_progress() {
-    disable_term_ui && return 0
+    [ "$TERM_UI" = false ] && {
+        echo "$2..."
+        return 0
+    }
     
     CURRENT_STEP=$1
     local message=$2
     local spinner=( "⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏" )
     local percentage=$((CURRENT_STEP * 100 / TOTAL_STEPS))
     
-    draw_content_box "Progress"
+    # Try to draw the content box, fall back to simple output if it fails
+    draw_content_box "Progress" || {
+        echo "$message... ($percentage%)"
+        return 0
+    }
+    
     tput cup $(($CONTENT_START + 1)) 4
     printf "${BLUE}[%2d/%2d]${NC} " "$CURRENT_STEP" "$TOTAL_STEPS"
     printf "${GREEN}${spinner[CURRENT_STEP % 10]}${NC} "
@@ -875,6 +918,13 @@ run_test_function() {
     fi
 }
 
+# Add a new function to handle graceful fallback
+handle_no_tui() {
+    TERM_UI=false
+    echo "Running in basic mode (no TUI)"
+    echo "--------------------------------"
+}
+
 # Main execution
 main() {
     parse_args "$@"
@@ -887,9 +937,12 @@ main() {
         exit $?
     fi
     
-    # Setup terminal
-    setup_terminal
-    trap restore_terminal EXIT
+    # Try to setup terminal, fall back to basic mode if it fails
+    if ! setup_terminal; then
+        handle_no_tui
+    fi
+    
+    trap restore_terminal EXIT INT TERM
     
     # Welcome message
     draw_content_box "Welcome"
