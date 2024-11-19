@@ -130,7 +130,7 @@ verify_script() {
         if ! curl -s -f "$URL" >/dev/null; then
             log "ERROR" "Cannot access hash file"
             return 1
-        }
+        fi
         log "INFO" "Hash file accessible"
         
         log "INFO" "Script verification test complete"
