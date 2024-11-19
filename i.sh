@@ -8,6 +8,17 @@ if [ -z "$TERM" ]; then
     export TERM=xterm-256color
 fi
 
+# Set UTF-8 encoding
+export LANG=en_US.UTF-8
+export LC_ALL=en_US.UTF-8
+
+# Set a consistent UTF-8 locale
+export LC_ALL=C.UTF-8
+export LANG=C.UTF-8
+
+# Update the background character
+BACKGROUND_CHAR='.'  # Using a simple dot instead of ░
+
 # Test mode function
 run_tests() {
     # Disable terminal UI in test mode
@@ -65,17 +76,13 @@ BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-# Set UTF-8 encoding
-export LANG=en_US.UTF-8
-export LC_ALL=en_US.UTF-8
-
 # Box drawing characters
 BOX_CHARS=(
-    "┌" "─" "┐"  # Top corners and horizontal
-    "│" " " "│"  # Vertical and space
-    "└" "─" "┘"  # Bottom corners and horizontal
-    "├" "┤"      # Side connectors
-    "═" "║"      # Double lines
+    "+" "-" "+"  # Top corners and horizontal
+    "|" " " "|"  # Vertical and space
+    "+" "-" "+"  # Bottom corners and horizontal
+    "+" "+"      # Side connectors
+    "=" "|"      # Double lines
 )
 
 # Global variables
@@ -126,9 +133,10 @@ setup_terminal() {
     
     # Draw background (only if previous commands succeeded)
     if [ $? -eq 0 ]; then
+        # Draw background with simple characters
         for ((i=1; i<=TERM_HEIGHT; i++)); do
             tput cup $i 0 2>/dev/null || continue
-            printf "%${TERM_WIDTH}s" "" | tr ' ' '░'
+            printf '%*s' "$TERM_WIDTH" '' | tr ' ' "$BACKGROUND_CHAR"
         done
         draw_header_box
     else
