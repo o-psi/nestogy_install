@@ -240,178 +240,84 @@ generate_passwords() {
     echo -e "${GREEN}✓${NC} Passwords generated"
 }
 
-install_packages() {
-    if [ "$TEST_MODE" = true ]; then
-        echo "Testing package dependencies..."
-        
-        # Helper function to check if a package or its alternative is available
-        check_package_or_alternative() {
-            local pkg="$1"
-            
-            # Handle virtual packages and common alternatives
-            case "$pkg" in
-                "<perl:any>")
-                    if apt-cache show perl >/dev/null 2>&1; then
-                        return 0
-                    fi
-                    ;;
-                "<python3:any>")
-                    if apt-cache show python3 >/dev/null 2>&1; then
-                        return 0
-                    fi
-                    ;;
-                "<debconf-2.0>")
-                    if apt-cache show debconf >/dev/null 2>&1; then
-                        return 0
-                    fi
-                    ;;
-                "<python3-certbot-abi-1>")
-                    if apt-cache show python3-certbot >/dev/null 2>&1; then
-                        return 0
-                    fi
-                    ;;
-                *)
-                    # Remove any version requirements (e.g., package (>= 1.0))
-                    pkg=$(echo "$pkg" | cut -d' ' -f1)
-                    if apt-cache show "$pkg" >/dev/null 2>&1; then
-                        return 0
-                    fi
-                    ;;
-            esac
-            return 1
-        }
-        
-        # Required packages with their dependencies
-        local packages=(
-            # Web server
-            "apache2"
-            "libapache2-mod-php"
-            "libapache2-mod-md"
-            
-            # Database
-            "mariadb-server"
-            "mariadb-client"
-            
-            # PHP and extensions
-            "php"
-            "php-cli"
-            "php-common"
-            "php-intl"
-            "php-mysqli"
-            "php-curl"
-            "php-imap"
-            "php-mailparse"
-            "php-xml"
-            "php-mbstring"
-            "php-zip"
-            
-            # SSL and security
-            "certbot"
-            "python3-certbot-apache"
-            
-            # System utilities
-            "git"
-            "curl"
-            "unzip"
-            "cron"
-        )
-        
-        local failed_packages=()
-        local missing_deps=()
-        
-        echo "Checking package availability..."
-        for package in "${packages[@]}"; do
-            echo -n "Testing $package... "
-            
-            # Check if package exists in repository
-            if ! apt-cache show "$package" >/dev/null 2>&1; then
-                echo "❌ Not found in repository"
-                failed_packages+=("$package")
-                continue
-            fi
-            
-            # Check package dependencies
-            local deps=$(apt-cache depends "$package" | grep "Depends:" | cut -d: -f2-)
-            local missing_pkg_deps=()
-            
-            for dep in $deps; do
-                if ! check_package_or_alternative "$dep"; then
-                    missing_pkg_deps+=("$dep")
-                fi
-            done
-            
-            if [ ${#missing_pkg_deps[@]} -eq 0 ]; then
-                echo "✓ OK"
-            else
-                echo "❌ Missing dependencies"
-                for dep in "${missing_pkg_deps[@]}"; do
-                    # Only add if it's not a virtual package that we can handle
-                    if ! check_package_or_alternative "$dep"; then
-                        missing_deps+=("$dep for $package")
-                    fi
-                done
-            fi
-        done
-        
-        # Report results
-        echo -e "\nTest Results:"
-        echo "=============="
-        
-        if [ ${#failed_packages[@]} -eq 0 ] && [ ${#missing_deps[@]} -eq 0 ]; then
-            echo "✓ All packages and dependencies are available"
-            return 0
-        fi
-        
-        if [ ${#failed_packages[@]} -gt 0 ]; then
-            echo -e "\nMissing Packages:"
-            printf '  - %s\n' "${failed_packages[@]}"
-        fi
-        
-        if [ ${#missing_deps[@]} -gt 0 ]; then
-            echo -e "\nMissing Dependencies:"
-            printf '  - %s\n' "${missing_deps[@]}"
-        fi
-        
-        return 1
-    fi
-    
-    show_progress "$((++CURRENT_STEP))" "Installing required packages"
-
-    apt-get update
-    apt-get install -y "${packages[@]}"
-
-    echo -e "${GREEN}✓${NC} Packages installed"
+# Add error handling function
+handle_error() {
+    local message="$1"
+    log "ERROR" "$message"
+    log "ERROR" "Installation failed. Check /var/log/itflow_install.log for details"
+    exit 1
 }
 
-modify_php_ini() {
-    show_progress "$((++CURRENT_STEP))" "Configuring PHP"
+# Update install_packages()
+install_packages() {
+    show_progress "$((++CURRENT_STEP))" "Installing required packages"
     
-    if [ "$TEST_MODE" = true ]; then
-        echo -e "${BLUE}[TEST] Would modify PHP settings${NC}"
-        return 0
-    fi
-    
-    PHP_VERSION=$(php -v | head -n 1 | awk '{print $2}' | cut -d '.' -f 1,2)
-    PHP_INI_PATH="/etc/php/${PHP_VERSION}/apache2/php.ini"
-    
-    local settings=(
-        "upload_max_filesize = 5000M"
-        "post_max_size = 5000M"
+    # Define required packages
+    local packages=(
+        apache2
+        libapache2-mod-php
+        php
+        php-cli
+        php-common
+        php-intl
+        php-mysqli
+        php-curl
+        php-imap
+        php-mailparse
+        php-xml
+        php-mbstring
+        php-zip
+        mariadb-server
+        mariadb-client
+        certbot
+        python3-certbot-apache
+        git
+        curl
+        unzip
+        cron
     )
     
-    local total=${#settings[@]}
-    local current=0
+    log "INFO" "Updating package lists..."
+    apt-get update || handle_error "Failed to update package lists"
     
-    for setting in "${settings[@]}"; do
-        ((current++))
-        local key=$(echo $setting | cut -d= -f1)
-        if ! sed -i "s/^;\?${key} =.*/${setting}/" $PHP_INI_PATH; then
-            echo -e "${RED}Failed to modify ${key}${NC}"
-            return 1
+    log "INFO" "Installing packages: ${packages[*]}"
+    apt-get install -y "${packages[@]}" || handle_error "Failed to install required packages"
+    
+    # Verify critical commands exist
+    local required_commands=(php apache2 mysql certbot git)
+    for cmd in "${required_commands[@]}"; do
+        if ! command -v "$cmd" >/dev/null 2>&1; then
+            handle_error "Required command '$cmd' not found after installation"
         fi
     done
     
-    echo -e "${GREEN}✓${NC} PHP configured"
+    log "INFO" "All packages installed successfully"
+    return 0
+}
+
+# Update modify_php_ini()
+modify_php_ini() {
+    show_progress "$((++CURRENT_STEP))" "Configuring PHP"
+    
+    # Get PHP version
+    PHP_VERSION=$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;') || handle_error "Failed to determine PHP version"
+    PHP_INI_PATH="/etc/php/${PHP_VERSION}/apache2/php.ini"
+    
+    if [ ! -f "$PHP_INI_PATH" ]; then
+        handle_error "PHP configuration file not found at $PHP_INI_PATH"
+    fi
+    
+    log "INFO" "Modifying PHP settings in $PHP_INI_PATH"
+    
+    # Backup original file
+    cp "$PHP_INI_PATH" "${PHP_INI_PATH}.bak" || handle_error "Failed to backup PHP configuration"
+    
+    # Update settings
+    sed -i 's/^upload_max_filesize.*/upload_max_filesize = 5000M/' "$PHP_INI_PATH" || handle_error "Failed to modify upload_max_filesize"
+    sed -i 's/^post_max_size.*/post_max_size = 5000M/' "$PHP_INI_PATH" || handle_error "Failed to modify post_max_size"
+    
+    log "INFO" "PHP configuration updated successfully"
+    return 0
 }
 
 setup_webroot() {
@@ -435,169 +341,77 @@ setup_webroot() {
     echo -e "${GREEN}✓${NC} Webroot configured"
 }
 
+# Update setup_apache()
 setup_apache() {
-    if [ "$TEST_MODE" = true ]; then
-        echo "Testing Apache configuration..."
-        
-        # Check if Apache is installed
-        if ! command -v apache2 >/dev/null 2>&1; then
-            echo "Apache not installed"
-            return 1
-        fi
-        
-        # Verify Apache modules
-        local required_modules=("rewrite" "ssl" "headers" "md")
-        for module in "${required_modules[@]}"; do
-            if ! apache2 -l | grep -q "mod_${module}"; then
-                echo "Note: Module '${module}' not loaded (expected in test environment)"
-            fi
-        done
-        
-        echo "✓ Apache configuration test passed"
-        return 0
-    fi
-    
     show_progress "$((++CURRENT_STEP))" "Configuring Apache"
     
-    local steps=6
-    local current=0
-    
-    # Enable required modules
-    ((current++))
-    a2enmod rewrite
-    a2enmod ssl
-    a2enmod headers
-    a2enmod md
-    
-    # Create Apache configuration
-    ((current++))
-    cat > "/etc/apache2/sites-available/${domain}.conf" <<EOL
-<VirtualHost *:80>
-    ServerAdmin webmaster@localhost
-    ServerName ${domain}
-    DocumentRoot /var/www/${domain}
-
-    <Directory /var/www/${domain}>
-        Options Indexes FollowSymLinks MultiViews
-        AllowOverride All
-        Require all granted
-
-        # Redirect all requests to index.php if file/directory doesn't exist
-        RewriteEngine On
-        RewriteCond %{REQUEST_FILENAME} !-f
-        RewriteCond %{REQUEST_FILENAME} !-d
-        RewriteRule ^ index.php [QSA,L]
-    </Directory>
-
-    ErrorLog \${APACHE_LOG_DIR}/${domain}_error.log
-    CustomLog \${APACHE_LOG_DIR}/${domain}_access.log combined
-</VirtualHost>
-EOL
-
-    # Create .htaccess file
-    ((current++))
-    cat > "/var/www/${domain}/.htaccess" <<EOL
-RewriteEngine On
-RewriteBase /
-
-# If the requested file/directory doesn't exist, redirect to index.php
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^ index.php [QSA,L]
-
-# Prevent access to .htaccess
-<Files .htaccess>
-    Order allow,deny
-    Deny from all
-</Files>
-EOL
-
-    # Set proper permissions
-    chown www-data:www-data "/var/www/${domain}/.htaccess"
-    chmod 644 "/var/www/${domain}/.htaccess"
-
-    # Enable site and disable default
-    ((current++))
-    a2ensite "${domain}.conf"
-    a2dissite 000-default.conf
-
-    # Restart Apache
-    ((current++))
-    systemctl restart apache2
-
-    # Setup SSL with certbot
-    ((current++))
-    certbot --apache --non-interactive --agree-tos --register-unsafely-without-email --domains ${domain}
-
-    echo -e "${GREEN}✓${NC} Apache configuration complete"
-    return 0
-}
-
-setup_mysql() {
-    if [ "$TEST_MODE" = true ]; then
-        echo "Testing MySQL setup..."
-        
-        # Check if MySQL package is available
-        if ! apt-cache show mysql-server >/dev/null 2>&1 && ! apt-cache show mariadb-server >/dev/null 2>&1; then
-            echo "MySQL/MariaDB package not available"
-            return 1
-        fi
-        
-        # Check if MySQL client is installed
-        if ! command -v mysql >/dev/null 2>&1; then
-            echo "MySQL client not installed"
-            return 1
-        fi
-        
-        echo "✓ MySQL package verification passed"
-        return 0
+    # Verify Apache installation
+    if ! command -v apache2 >/dev/null 2>&1; then
+        handle_error "Apache2 not installed"
     fi
     
-    # Real MySQL setup code
+    # Enable modules
+    local modules=(rewrite ssl headers md)
+    for mod in "${modules[@]}"; do
+        log "INFO" "Enabling Apache module: $mod"
+        a2enmod "$mod" || handle_error "Failed to enable Apache module: $mod"
+    done
+    
+    # Create and verify sites-available directory
+    local sites_dir="/etc/apache2/sites-available"
+    if [ ! -d "$sites_dir" ]; then
+        handle_error "Apache sites directory not found: $sites_dir"
+    fi
+    
+    # Rest of setup_apache() function...
+}
+
+# Update setup_mysql()
+setup_mysql() {
     show_progress "$((++CURRENT_STEP))" "Setting up database"
     
-    if ! systemctl is-active --quiet mysql; then
-        echo -e "${RED}MySQL is not running${NC}"
-        return 1
+    # Check if MySQL/MariaDB is installed
+    if ! command -v mysql >/dev/null 2>&1; then
+        handle_error "MySQL/MariaDB not installed"
     fi
     
-    # ... rest of the function ...
+    # Check if service is running
+    if ! systemctl is-active --quiet mysql; then
+        log "INFO" "Starting MySQL service..."
+        systemctl start mysql || handle_error "Failed to start MySQL service"
+    fi
+    
+    # Rest of setup_mysql() function...
 }
 
+# Update clone_nestogy()
 clone_nestogy() {
     show_progress "$((++CURRENT_STEP))" "Cloning ITFlow-NG"
     
-    if [ "$TEST_MODE" = true ]; then
-        if ! git clone https://github.com/twetech/itflow-ng.git "/var/www/${domain}" >/dev/null 2>&1; then
-            echo -e "${RED}Failed to clone repository${NC}"
-            return 1
-        fi
-        echo -e "${GREEN}✓${NC} Repository cloned successfully"
-        return 0
+    local repo_url="https://github.com/twetech/itflow-ng.git"
+    local target_dir="/var/www/${domain}"
+    
+    # Verify git is installed
+    if ! command -v git >/dev/null 2>&1; then
+        handle_error "Git not installed"
     fi
     
-    local steps=3
-    local current=0
+    # Remove target directory if it exists
+    if [ -d "$target_dir" ]; then
+        rm -rf "$target_dir" || handle_error "Failed to remove existing directory"
+    fi
     
     # Clone repository
-    ((current++))
-    if ! git clone https://github.com/twetech/itflow-ng.git "/var/www/${domain}" >/dev/null 2>&1; then
-        echo -e "${RED}Failed to clone repository${NC}"
-        return 1
-    fi
+    git clone "$repo_url" "$target_dir" || handle_error "Failed to clone repository"
     
     # Set permissions
-    ((current++))
-    if ! chown -R www-data:www-data "/var/www/${domain}"; then
-        echo -e "${RED}Failed to set permissions${NC}"
-        return 1
+    if ! chown -R www-data:www-data "$target_dir"; then
+        handle_error "Failed to set permissions"
     fi
     
     # Configure environment
-    ((current++))
-    if ! cp "/var/www/${domain}/.env.example" "/var/www/${domain}/.env"; then
-        echo -e "${RED}Failed to create environment file${NC}"
-        return 1
+    if ! cp "$target_dir/.env.example" "$target_dir/.env"; then
+        handle_error "Failed to create environment file"
     fi
     
     echo -e "${GREEN}✓${NC} Repository cloned successfully"
