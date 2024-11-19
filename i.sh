@@ -404,17 +404,33 @@ clone_nestogy() {
     # Clone repository
     git clone "$repo_url" "$target_dir" || handle_error "Failed to clone repository"
     
-    # Set permissions
-    if ! chown -R www-data:www-data "$target_dir"; then
-        handle_error "Failed to set permissions"
-    fi
+    # Create config directory
+    mkdir -p "$target_dir/config/${domain}" || handle_error "Failed to create config directory"
     
-    # Configure environment
-    if ! cp "$target_dir/.env.example" "$target_dir/.env"; then
-        handle_error "Failed to create environment file"
-    fi
+    # Create config file
+    cat > "$target_dir/config/${domain}/config.php" << EOF || handle_error "Failed to create config file"
+<?php
+return [
+    'db' => [
+        'host' => '127.0.0.1',
+        'port' => '3306',
+        'database' => 'nestogy',
+        'username' => 'nestogy',
+        'password' => '${mariadbpwd}'
+    ],
+    'locale' => 'en_US',
+    'timezone' => 'America/New_York',
+    'cron_key' => '${cronkey}'
+];
+EOF
     
-    echo -e "${GREEN}✓${NC} Repository cloned successfully"
+    # Set proper permissions
+    chown -R www-data:www-data "$target_dir" || handle_error "Failed to set directory permissions"
+    chmod 750 "$target_dir/config" || handle_error "Failed to set config directory permissions"
+    chmod 640 "$target_dir/config/${domain}/config.php" || handle_error "Failed to set config file permissions"
+    
+    log "INFO" "Repository cloned and configured successfully"
+    return 0
 }
 
 setup_cronjobs() {
