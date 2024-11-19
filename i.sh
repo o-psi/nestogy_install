@@ -275,6 +275,8 @@ install_packages() {
         curl
         unzip
         cron
+        php-json      # Added for Composer
+        php-tokenizer # Added for Composer
     )
     
     log "INFO" "Updating package lists..."
@@ -418,7 +420,7 @@ setup_mysql() {
 
 # Update clone_nestogy()
 clone_nestogy() {
-    show_progress "$((++CURRENT_STEP))" "Cloning ITFlow-NG"
+    show_progress "$((++CURRENT_STEP))" "Setting up ITFlow-NG"
     
     local repo_url="https://github.com/twetech/itflow-ng.git"
     local target_dir="/var/www/${domain}"
@@ -426,6 +428,12 @@ clone_nestogy() {
     # Verify git is installed
     if ! command -v git >/dev/null 2>&1; then
         handle_error "Git not installed"
+    fi
+    
+    # Verify composer is installed, if not install it
+    if ! command -v composer >/dev/null 2>&1; then
+        log "INFO" "Installing Composer..."
+        curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer || handle_error "Failed to install Composer"
     fi
     
     # Remove target directory if it exists
@@ -436,7 +444,7 @@ clone_nestogy() {
     # Clone repository
     git clone "$repo_url" "$target_dir" || handle_error "Failed to clone repository"
     
-    # Create config directory
+    # Create config directory and file
     mkdir -p "$target_dir/config/${domain}" || handle_error "Failed to create config directory"
     
     # Create config file
@@ -456,12 +464,17 @@ return [
 ];
 EOF
     
+    # Install Composer dependencies
+    log "INFO" "Installing Composer dependencies..."
+    cd "$target_dir" || handle_error "Failed to change to project directory"
+    composer install --no-dev --optimize-autoloader || handle_error "Failed to install Composer dependencies"
+    
     # Set proper permissions
     chown -R www-data:www-data "$target_dir" || handle_error "Failed to set directory permissions"
     chmod 750 "$target_dir/config" || handle_error "Failed to set config directory permissions"
     chmod 640 "$target_dir/config/${domain}/config.php" || handle_error "Failed to set config file permissions"
     
-    log "INFO" "Repository cloned and configured successfully"
+    log "INFO" "Repository cloned and dependencies installed successfully"
     return 0
 }
 
@@ -528,7 +541,7 @@ setup_ssl() {
     # Check if certbot is installed
     if ! command -v certbot >/dev/null 2>&1; then
         handle_error "Certbot not installed"
-    fi
+    }
     
     log "INFO" "Obtaining SSL certificate..."
     
